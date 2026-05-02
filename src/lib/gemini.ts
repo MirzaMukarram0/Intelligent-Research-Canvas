@@ -14,9 +14,34 @@ export function getGenAI(): GoogleGenerativeAI {
   return _genai;
 }
 
-// gemini-2.5-flash is the current free-tier model. Override via env if you've
-// upgraded to a paid plan and want a different model (e.g. gemini-2.5-pro).
-export const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+// gemini-2.5-flash-lite is fast (no "thinking" tokens), free-tier-friendly
+// (15 RPM), and ideal for structured JSON extraction. Override via env if you
+// need higher quality (e.g. gemini-2.5-flash, gemini-2.5-pro).
+export const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite";
+
+// Hard ceiling for any single Gemini call. The Vercel/Cloud Run function
+// timeout is 60s, so we cap individual model calls a bit lower to leave room
+// for parsing & response.
+export const CALL_TIMEOUT_MS = Number(process.env.GEMINI_CALL_TIMEOUT_MS ?? 45_000);
+
+export function withTimeout<T>(p: Promise<T>, ms = CALL_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(
+      () => reject(new Error(`Gemini call exceeded ${ms}ms timeout`)),
+      ms
+    );
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
+  });
+}
 
 /**
  * Wraps a Gemini call with exponential backoff for 429 / rate-limit errors.
@@ -24,10 +49,11 @@ export const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  opts: { retries?: number; baseDelayMs?: number } = {}
+  opts: { retries?: number; baseDelayMs?: number; maxDelayMs?: number } = {}
 ): Promise<T> {
-  const retries = opts.retries ?? 2;
+  const retries = opts.retries ?? 1; // 1 retry max — keep total latency bounded
   const baseDelay = opts.baseDelayMs ?? 1500;
+  const maxDelay = opts.maxDelayMs ?? 8_000;
   let lastErr: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -39,11 +65,11 @@ export async function withRetry<T>(
       const is429 = /429|quota|rate/i.test(msg);
       if (!is429 || attempt === retries) throw err;
 
-      // Try to extract the API-suggested retry delay (e.g. "23.6s").
+      // Honour API-suggested delay but cap so we don't block the request 25s+.
       const m = msg.match(/retryDelay"?\s*:\s*"?(\d+(?:\.\d+)?)s/i);
       const delay = m
-        ? Math.min(parseFloat(m[1]) * 1000, 30_000)
-        : baseDelay * Math.pow(2, attempt);
+        ? Math.min(parseFloat(m[1]) * 1000, maxDelay)
+        : Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -54,7 +80,7 @@ export const JSON_CONFIG: GenerationConfig = {
   responseMimeType: "application/json",
   temperature: 0.2,
   topP: 0.8,
-  maxOutputTokens: 4096,
+  maxOutputTokens: 8192,
 };
 
 export const CHAT_CONFIG: GenerationConfig = {

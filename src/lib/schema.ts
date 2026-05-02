@@ -2,29 +2,30 @@ import { z } from "zod";
 
 export const nodeSchema = z.object({
   id: z.string().min(1),
-  label: z.string().min(1).max(80),
+  label: z.string().min(1).max(120),
   category: z.enum(["concept", "entity", "method", "finding"]),
-  source_quote: z.string().min(8),
+  // Quote may be short or omitted for some node types — be lenient.
+  source_quote: z.string().default(""),
   description: z.string().optional().default(""),
 });
 
 export const edgeSchema = z.object({
   source: z.string(),
   target: z.string(),
-  relationship: z.string().min(1).max(120),
-  weight: z.number().int().min(1).max(5).default(1),
+  relationship: z.string().min(1).max(160),
+  weight: z.coerce.number().int().min(1).max(5).default(1),
 });
 
 export const graphResponseSchema = z.object({
-  nodes: z.array(nodeSchema),
-  edges: z.array(edgeSchema),
+  nodes: z.array(nodeSchema).default([]),
+  edges: z.array(edgeSchema).default([]),
   error: z.string().optional(),
 });
 
 export const insightSchema = z.object({
   id: z.string(),
-  title: z.string().min(1).max(140),
-  body: z.string().min(8),
+  title: z.string().min(1).max(180),
+  body: z.string().min(1),
   category: z.enum([
     "finding",
     "limitation",
@@ -37,7 +38,8 @@ export const insightSchema = z.object({
 });
 
 export const insightResponseSchema = z.object({
-  insights: z.array(insightSchema).min(1).max(10),
+  // Allow zero insights — short or non-academic docs may legitimately produce none.
+  insights: z.array(insightSchema).max(12).default([]),
 });
 
 export type GraphResponse = z.infer<typeof graphResponseSchema>;

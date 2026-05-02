@@ -36,11 +36,20 @@ export const useGraphStore = create<GraphState>((set) => ({
       insights: [],
     });
     try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
+      // Client-side guard: 90s ceiling so we never spin forever.
+      const ac = new AbortController();
+      const killer = setTimeout(() => ac.abort(), 90_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(killer);
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const e = new Error(err.error ?? `Analysis failed (${res.status})`);
@@ -58,11 +67,18 @@ export const useGraphStore = create<GraphState>((set) => ({
         isLoading: false,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Analysis failed";
-      const hint =
-        err && typeof err === "object" && "hint" in err
-          ? (err as { hint?: string }).hint ?? null
-          : null;
+      const isAbort =
+        err instanceof DOMException && err.name === "AbortError";
+      const message = isAbort
+        ? "Analysis took too long and was cancelled."
+        : err instanceof Error
+        ? err.message
+        : "Analysis failed";
+      const hint = isAbort
+        ? "Try a shorter document or switch to a faster model (set GEMINI_MODEL=gemini-2.5-flash-lite)."
+        : err && typeof err === "object" && "hint" in err
+        ? (err as { hint?: string }).hint ?? null
+        : null;
       set({ error: message, errorHint: hint, isLoading: false });
     }
   },

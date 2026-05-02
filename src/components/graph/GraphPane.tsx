@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -202,6 +202,22 @@ export function GraphPane() {
 }
 
 function LoadingState() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Date.now() - start), 250);
+    return () => clearInterval(id);
+  }, []);
+  const seconds = (elapsed / 1000).toFixed(1);
+  const stage =
+    elapsed < 4_000
+      ? "Sending document to Gemini…"
+      : elapsed < 15_000
+      ? "Extracting concepts and relationships…"
+      : elapsed < 35_000
+      ? "Still working — large documents take longer."
+      : "Hmm, this is unusually slow. Will time out at 90s.";
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-7 bg-obsidian relative overflow-hidden">
       <div className="pointer-events-none absolute inset-0">
@@ -230,9 +246,14 @@ function LoadingState() {
         />
       </div>
 
-      <p className="font-mono text-[10px] text-ink-faint uppercase tracking-[0.18em]">
-        gemini 2.0 flash · ~10s typical
-      </p>
+      <div className="text-center space-y-1.5">
+        <p className="font-mono text-[11px] text-ink-soft tabular-nums">
+          {seconds}s
+        </p>
+        <p className="font-mono text-[10px] text-ink-faint uppercase tracking-[0.18em] max-w-xs">
+          {stage}
+        </p>
+      </div>
     </div>
   );
 }
