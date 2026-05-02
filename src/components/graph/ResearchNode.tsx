@@ -2,6 +2,8 @@
 
 import { Handle, Position, type NodeProps } from "reactflow";
 import { useHighlightStore } from "@/store/highlightStore";
+import { useProjectStore } from "@/store/projectStore";
+import { CiteButton } from "@/components/shared/CiteButton";
 
 const CATEGORY_STYLES = {
   concept: {
@@ -58,6 +60,8 @@ export function ResearchNode({ data, selected }: NodeProps) {
   const setFocus = useHighlightStore((s) => s.setFocus);
   const activeNodeId = useHighlightStore((s) => s.activeNodeId);
   const isActive = activeNodeId === data?.id || selected;
+  const activeSlotId = useProjectStore((s) => s.activeSlotId);
+  const filename = useProjectStore((s) => s.slots[s.activeSlotId]?.filename ?? "");
 
   const handleClick = () => {
     if (data?.source_quote && data?.id) {
@@ -74,9 +78,9 @@ export function ResearchNode({ data, selected }: NodeProps) {
           isActive ? style.border : style.border + "55"
         }`,
         borderRadius: 10,
-        padding: "10px 14px",
-        minWidth: 160,
-        maxWidth: 220,
+        padding: "13px 18px",
+        minWidth: 190,
+        maxWidth: 270,
         cursor: "pointer",
         transition: "all 0.18s ease",
         boxShadow: isActive
@@ -118,15 +122,28 @@ export function ResearchNode({ data, selected }: NodeProps) {
             fontFamily: "var(--font-mono)",
             textTransform: "uppercase",
             letterSpacing: "0.12em",
+            flex: 1,
           }}
         >
           {style.label}
         </p>
+        {data?.source_quote && (
+          <div style={{ marginLeft: "auto" }}>
+            <CiteButton
+              slotId={activeSlotId}
+              filename={filename}
+              kind="node"
+              label={data.label}
+              quote={data.source_quote}
+              category={cat}
+            />
+          </div>
+        )}
       </div>
       <p
         style={{
           color: "#F0EDE8",
-          fontSize: 12.5,
+          fontSize: 14,
           lineHeight: 1.35,
           fontFamily: "var(--font-geist-sans), system-ui",
           fontWeight: 500,

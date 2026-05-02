@@ -59,52 +59,77 @@ async function callJson<T>(
 
 /**
  * Best-effort repair for JSON truncated mid-stream (token-budget hit).
- * Strategy: walk the prefix, track string/bracket state, then close anything
- * still open. Drops the trailing partial element when needed.
+ * Handles:
+ *   1. Truncation inside a string value  → backtrack to last complete element
+ *   2. Dangling "key": with no value     → remove the key before closing
+ *   3. Trailing commas                   → strip before closing brackets
+ *   4. Open brackets/braces             → close in reverse order
  */
 function repairTruncatedJson(s: string): string {
   let inString = false;
   let escape = false;
   const stack: string[] = [];
-  let lastSafeIdx = -1; // index just after last fully-closed top-level element
+  let lastSafeIdx = -1; // index just after the last fully-closed array element
+  let lastCommaIdx = -1; // last comma seen outside a string
 
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (c === "\\") {
-        escape = true;
-      } else if (c === '"') {
-        inString = false;
-      }
+      if (escape) { escape = false; }
+      else if (c === "\\") { escape = true; }
+      else if (c === '"') { inString = false; }
       continue;
     }
-    if (c === '"') {
-      inString = true;
-      continue;
-    }
+    if (c === '"') { inString = true; continue; }
+    if (c === ",") { lastCommaIdx = i; }
     if (c === "{" || c === "[") {
       stack.push(c === "{" ? "}" : "]");
     } else if (c === "}" || c === "]") {
       stack.pop();
-      // After closing, if we're inside an array (top frame is ']'), this
-      // is the end of one element — remember as a safe truncation point.
       if (stack.length === 1 && stack[0] === "]") lastSafeIdx = i + 1;
     }
   }
 
   let out = s;
-  // If we ended inside a string, truncate back to the last safe element.
-  if (inString && lastSafeIdx > 0) {
-    out = s.slice(0, lastSafeIdx);
-    // Recompute open brackets for the truncated prefix.
-    return repairTruncatedJson(out);
+
+  // Phase 1: if truncated inside a string, backtrack to last complete element.
+  if (inString) {
+    if (lastSafeIdx > 0) {
+      return repairTruncatedJson(s.slice(0, lastSafeIdx));
+    }
+    if (lastCommaIdx > 0) {
+      return repairTruncatedJson(s.slice(0, lastCommaIdx));
+    }
+    // Just close the string as a fallback.
+    out = s + '"';
   }
-  // Drop trailing comma if the partial element was cut between commas.
-  out = out.replace(/,\s*$/, "");
-  // Close all open structures in reverse order.
-  while (stack.length) out += stack.pop();
+
+  // Phase 2: remove dangling "key": with no value before any close bracket.
+  // e.g. {"id":"x","source":} → {"id":"x"}
+  out = out.replace(/,?\s*"(?:[^"\\]|\\.)*"\s*:\s*(?=[\}\]])/g, "");
+
+  // Phase 3: remove trailing "key": at end of string (value not started).
+  out = out.replace(/,?\s*"(?:[^"\\]|\\.)*"\s*:\s*$/, "");
+
+  // Phase 4: remove trailing commas before close brackets.
+  out = out.replace(/,(\s*[\}\]])/g, "$1");
+
+  // Phase 5: close all still-open brackets.
+  const finalStack: string[] = [];
+  inString = false; escape = false;
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i];
+    if (inString) {
+      if (escape) { escape = false; }
+      else if (c === "\\") { escape = true; }
+      else if (c === '"') { inString = false; }
+    } else {
+      if (c === '"') { inString = true; }
+      else if (c === "{" || c === "[") { finalStack.push(c === "{" ? "}" : "]"); }
+      else if (c === "}" || c === "]") { finalStack.pop(); }
+    }
+  }
+  while (finalStack.length) out += finalStack.pop();
   return out;
 }
 
@@ -126,11 +151,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Cap input at 60k chars — large enough for most papers, still leaves
-    // headroom under the model's 1M-token context window.
-    const trimmedText = text.slice(0, 60_000);
+    // Cap input — graph extractor uses 35k (its output is ~4× the input size
+    // so 35k → ~14k output which fits comfortably in the token budget).
+    // Insights extractor can use more text safely (its output is much smaller).
+    const graphText = text.slice(0, 35_000);
+    const insightText = text.slice(0, 60_000);
     console.log(
-      `[/api/analyze] start · model=${MODEL} · input=${trimmedText.length} chars`
+      `[/api/analyze] start · model=${MODEL} · input=${insightText.length} chars`
     );
 
     const model = getGenAI().getGenerativeModel({
@@ -143,7 +170,7 @@ export async function POST(req: NextRequest) {
         "graph",
         () =>
           model.generateContent(
-            `${GRAPH_EXTRACTOR_PROMPT}\n\n---\n\nTEXT:\n${trimmedText}`
+            `${GRAPH_EXTRACTOR_PROMPT}\n\n---\n\nTEXT:\n${graphText}`
           ),
         (raw) => graphResponseSchema.parse(raw)
       ),
@@ -151,7 +178,7 @@ export async function POST(req: NextRequest) {
         "insights",
         () =>
           model.generateContent(
-            `${INSIGHT_ANALYZER_PROMPT}\n\n---\n\nTEXT:\n${trimmedText}`
+            `${INSIGHT_ANALYZER_PROMPT}\n\n---\n\nTEXT:\n${insightText}`
           ),
         (raw) => insightResponseSchema.parse(raw)
       ),

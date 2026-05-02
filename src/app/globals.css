@@ -254,9 +254,11 @@ body {
 .react-flow__controls button {
   background: #111114 !important;
   border-bottom: 1px solid #1e1e22 !important;
-  color: #9a9895 !important;
+  color: #e8e8e8 !important;
 }
-.react-flow__controls button:hover { background: #18181c !important; color: #f0ede8 !important; }
+.react-flow__controls button svg { fill: #e8e8e8 !important; color: #e8e8e8 !important; }
+.react-flow__controls button:hover { background: #18181c !important; color: #ffffff !important; }
+.react-flow__controls button:hover svg { fill: #ffffff !important; }
 .react-flow__minimap-mask { fill: rgba(12, 12, 14, 0.6) !important; }
 
 /* Tag prose-like markdown styling for chat */

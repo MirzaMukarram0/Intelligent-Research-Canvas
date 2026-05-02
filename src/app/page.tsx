@@ -56,7 +56,7 @@ function NavBar() {
             Research Canvas
           </span>
           <span className="font-mono text-[9px] text-ink-faint uppercase tracking-[0.2em] border border-obsidian-border rounded px-1.5 py-0.5 ml-1">
-            v0.1
+            v0.2
           </span>
         </Link>
 
@@ -95,23 +95,21 @@ function Hero() {
             New
           </span>
           <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-mute">
-            Powered by Gemini 2.0 Flash
+            Multi-doc workspace · Notepad · Compare
           </span>
         </div>
 
         <h1 className="font-display text-[56px] md:text-[88px] leading-[0.95] tracking-tight mb-7">
-          Read papers
+          Your literature review
           <br />
-          <span className="italic text-ink-mute">like a graph,</span>
-          <br />
-          not a wall of text.
+          <span className="italic text-ink-mute">hub, not a chatbot.</span>
         </h1>
 
         <p className="text-[17px] md:text-[18px] text-ink-soft leading-relaxed max-w-2xl mb-10">
-          Upload a research PDF. <strong className="text-ink">Two AI agents</strong> run in parallel to
-          extract a structured knowledge graph and a ranked set of insights.
-          Click any node — the exact source sentence glows in the document. Then{" "}
-          <strong className="text-ink">chat</strong> with the paper using full context.
+          Load up to <strong className="text-ink">3 papers simultaneously</strong>. Two AI agents extract a knowledge graph
+          and ranked insights per document. <strong className="text-ink">Cite</strong> any node, insight, or
+          chat reply to a persistent notepad — then export a structured research report.
+          Switch to <strong className="text-ink">Compare mode</strong> to diff two papers side-by-side without leaving the canvas.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-3 mb-14">
@@ -120,9 +118,14 @@ function Hero() {
             className="group inline-flex items-center gap-2 bg-gold text-obsidian font-mono text-[12px] uppercase tracking-[0.14em] font-semibold rounded-md px-5 py-3 hover:bg-gold-soft transition-all shadow-[0_0_40px_rgba(232,162,49,0.25)]"
           >
             <span>Launch Canvas</span>
-            <span className="group-hover:translate-x-0.5 transition-transform">
-              →
-            </span>
+            <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+          </Link>
+          <Link
+            href="/canvas"
+            className="group inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.14em] text-ai border border-ai/40 hover:bg-ai/10 hover:border-ai/60 rounded-md px-5 py-3 transition-all"
+          >
+            <span>Compare Papers →</span>
+            <span className="font-mono text-[9px] text-ai/60 normal-case tracking-normal">inside canvas</span>
           </Link>
           <a
             href="#how"
@@ -133,16 +136,18 @@ function Hero() {
         </div>
 
         {/* Pipeline trail */}
-        <div className="flex items-center gap-2 md:gap-4 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.16em] text-ink-faint">
-          <span className="text-gold">PDF</span>
+        <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+          <span className="text-gold">1–3 PDFs</span>
           <Arrow />
-          <span>Knowledge Graph</span>
+          <span>Knowledge Graphs</span>
           <Arrow />
           <span>Insights</span>
           <Arrow />
           <span>Chat</span>
           <Arrow />
-          <span className="text-sage">LaTeX</span>
+          <span className="text-ai">Notepad</span>
+          <Arrow />
+          <span className="text-sage">Report</span>
         </div>
       </div>
     </section>
@@ -584,32 +589,32 @@ function MockNode({
 
 const FEATURES = [
   {
-    label: "Bidirectional highlight",
+    label: "Multi-doc workspace",
     color: "gold" as const,
+    title: "Three papers, one canvas.",
+    body: "Load up to 3 PDFs simultaneously. Each gets its own colour-coded tab, persistent knowledge graph, insights panel, and chat history — all in a single workspace.",
+    icon: "⊞",
+  },
+  {
+    label: "Bidirectional highlight",
+    color: "ai" as const,
     title: "Click a node, the sentence glows.",
     body: "Every graph node carries the verbatim source quote. Clicking finds and highlights the exact passage in the document — zero round-trips.",
     icon: "◆",
   },
   {
-    label: "Parallel agents",
-    color: "ai" as const,
-    title: "Two minds, one click.",
-    body: "Graph extraction and insight synthesis run as concurrent Gemini calls, so you watch both progress bars fill at the same time.",
-    icon: "∥",
-  },
-  {
-    label: "Context-aware chat",
+    label: "Research notepad",
     color: "sage" as const,
-    title: "Conversation that sees the whole paper.",
-    body: "The chat model receives the document, the graph, and your last clicked focus quote — so answers are grounded in what you're looking at.",
-    icon: "✱",
+    title: "Cite anything, export everything.",
+    body: "Hit Cite on any graph node, insight card, or chat reply. Citations land in a persistent notepad with inline annotations and tags. One click exports a structured research report.",
+    icon: "📓",
   },
   {
-    label: "Compilable export",
+    label: "In-canvas compare",
     color: "rose" as const,
-    title: "From PDF to .tex in one click.",
-    body: "Press Export — get a structured LaTeX file with abstract, findings, concept map, and your chat transcript. No manual cleanup.",
-    icon: "λ",
+    title: "Side-by-side, no page switch.",
+    body: "Toggle Compare mode to see two documents, their graphs, and chats side-by-side. Session state is never lost — it's a layout toggle, not a new route.",
+    icon: "⇄",
   },
 ];
 
@@ -618,8 +623,8 @@ function FeatureGrid() {
     <section id="features" className="max-w-7xl mx-auto px-6 py-24">
       <SectionHeader
         eyebrow="Capabilities"
-        title="A canvas, not a chatbot."
-        sub="Four primitives, four moments of delight."
+        title="A research hub, not a chatbot."
+        sub="Six primitives built for literature review."
       />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-obsidian-border rounded-2xl overflow-hidden border border-obsidian-border mt-12">
         {FEATURES.map((f) => {
@@ -667,20 +672,26 @@ function HowItWorks() {
     {
       n: "01",
       label: "Drop",
-      title: "Upload a PDF",
-      body: "PDF text is extracted in your browser via pdfjs-dist — no server upload, no waiting on file I/O.",
+      title: "Upload 1–3 PDFs",
+      body: "Drag papers onto the canvas tabs. Each gets its own colour-coded slot. PDF text is extracted in the browser — no server upload.",
     },
     {
       n: "02",
       label: "Analyze",
-      title: "Two agents fire",
-      body: "Graph Extractor builds 8–20 typed nodes. Insight Analyzer ranks 5 structured insights. Both stream from Gemini in parallel.",
+      title: "Two agents per doc",
+      body: "Graph Extractor builds 8–20 typed nodes. Insight Analyzer ranks structured insights. Both run in parallel from Gemini 2.5 Flash.",
     },
     {
       n: "03",
       label: "Explore",
-      title: "Click → highlight → ask",
-      body: "Click a node — its source sentence glows in the document. Open the chat — every question answers from full context.",
+      title: "Click · Cite · Compare",
+      body: "Click nodes to highlight source sentences. Hit Cite on anything to add it to the Notepad. Switch to Compare mode to diff two papers side-by-side.",
+    },
+    {
+      n: "04",
+      label: "Export",
+      title: "Report from your citations",
+      body: "Annotate and tag each citation in the Notepad. Export a structured Markdown or PDF report built from your cited findings — not a raw dump.",
     },
   ];
 
@@ -688,10 +699,10 @@ function HowItWorks() {
     <section id="how" className="max-w-7xl mx-auto px-6 py-24 border-y border-obsidian-border/40">
       <SectionHeader
         eyebrow="Pipeline"
-        title="Three steps, ~15 seconds."
-        sub="From a raw paper to a structured knowledge workspace."
+        title="Four steps, ~20 seconds."
+        sub="From raw papers to a citable research report."
       />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-14">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-14">
         {steps.map((s) => (
           <div
             key={s.n}
@@ -725,37 +736,37 @@ const AGENTS = [
     letter: "A",
     name: "Graph Extractor",
     color: "#E8A231",
-    role: "Builds a typed knowledge graph",
+    role: "Builds a typed knowledge graph per slot",
     detail:
-      "Returns 8–20 nodes across four categories (concept, entity, method, finding) with verbatim source quotes for every node.",
+      "Returns 8–20 nodes across nine categories (concept, entity, method, finding, dataset, metric, result, assumption, limitation) with verbatim source quotes. Runs independently per document slot.",
     output: "{ nodes: [...], edges: [...] }",
   },
   {
     letter: "B",
     name: "Insight Analyzer",
     color: "#4A9EFF",
-    role: "Distills the paper into 5 insights",
+    role: "Distills each paper into ranked insights",
     detail:
-      "Ranked by significance, tagged by category (finding · limitation · methodology · implication · gap) and confidence (high · med · low).",
-    output: "{ insights: [5 items] }",
+      "Up to 12 insights ranked by significance, tagged by category (finding · limitation · methodology · implication · gap · contribution) and confidence. Runs in parallel with Agent A.",
+    output: "{ insights: [...], summary }",
   },
   {
     letter: "C",
     name: "Context Chat",
     color: "#3ECF8E",
-    role: "Streams answers grounded in the doc",
+    role: "Streams answers grounded in the active doc",
     detail:
-      "Receives DOCUMENT + GRAPH + FOCUS quote on every turn. References graph nodes inline as clickable [NODE: label] chips.",
+      "Receives DOCUMENT + GRAPH + FOCUS quote on every turn. References graph nodes inline as clickable chips. Each document slot has its own independent chat history.",
     output: "stream → ReadableStream",
   },
   {
     letter: "D",
-    name: "LaTeX Formatter",
-    color: "#E85D82",
-    role: "Compiles your work into a .tex",
+    name: "Notepad + Report",
+    color: "#9F7AEA",
+    role: "Turns citations into a structured report",
     detail:
-      "One-shot LaTeX or Markdown export with abstract, key findings, concept map, and chat transcript. Compiles with pdflatex.",
-    output: ".tex / .md download",
+      "Cite any node, insight, or chat reply. Annotate and tag citations in the persistent Notepad sidebar. Export builds a grouped Markdown or PDF report from your cited findings — not a raw dump.",
+    output: ".md / .pdf report",
   },
 ];
 
@@ -765,7 +776,7 @@ function AgentSection() {
       <SectionHeader
         eyebrow="Architecture"
         title="Four specialized agents."
-        sub="Every prompt is hand-tuned, JSON-mode locked, and Zod-validated before reaching the UI."
+        sub="Every prompt is hand-tuned, JSON-mode locked, Zod-validated, and runs per document slot."
       />
       <div className="space-y-px bg-obsidian-border rounded-2xl overflow-hidden border border-obsidian-border mt-12">
         {AGENTS.map((a) => (
@@ -837,13 +848,13 @@ function DesignNote() {
           <h2 className="font-display text-[44px] md:text-[52px] leading-[1.05] mt-4 tracking-tight">
             Not a chatbot.
             <br />
-            <span className="italic text-ink-mute">A scientific instrument.</span>
+            <span className="italic text-ink-mute">A research instrument.</span>
           </h2>
           <p className="text-[15px] text-ink-soft leading-relaxed mt-6 max-w-md">
             Inspired by Nature journal and terminal interfaces. Every element
-            earns its place. No glassmorphism, no gradient bloat, no AI slop.
-            Just a precise, functional canvas you'd actually use to do real
-            research.
+            earns its place. Three-pane workspace, persistent per-document state,
+            a Notepad that bridges exploration to writing, and Compare mode that
+            never loses your session. Built for researchers doing real literature review.
           </p>
         </div>
 
@@ -922,19 +933,21 @@ function FinalCTA() {
           <h2 className="font-display text-[48px] md:text-[68px] leading-[0.98] tracking-tight mt-5 mb-7">
             Open the canvas.
             <br />
-            <span className="italic text-ink-mute">Drop a paper.</span>
+            <span className="italic text-ink-mute">Drop your papers.</span>
           </h2>
           <p className="text-[16px] text-ink-soft max-w-xl mx-auto mb-10">
-            No signup. No database. Your document never leaves the browser
-            until the moment AI analysis runs.
+            No signup. No database. Load up to 3 papers, explore their graphs,
+            cite findings to your Notepad, and export a structured report.
           </p>
-          <Link
-            href="/canvas"
-            className="inline-flex items-center gap-3 bg-gold text-obsidian font-mono text-[12px] uppercase tracking-[0.16em] font-semibold rounded-md px-7 py-3.5 hover:bg-gold-soft transition-all shadow-[0_0_60px_rgba(232,162,49,0.3)]"
-          >
-            <span>Launch Canvas</span>
-            <span className="text-base leading-none">→</span>
-          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/canvas"
+              className="inline-flex items-center gap-3 bg-gold text-obsidian font-mono text-[12px] uppercase tracking-[0.16em] font-semibold rounded-md px-7 py-3.5 hover:bg-gold-soft transition-all shadow-[0_0_60px_rgba(232,162,49,0.3)]"
+            >
+              <span>Launch Canvas</span>
+              <span className="text-base leading-none">→</span>
+            </Link>
+          </div>
         </div>
       </div>
     </section>
@@ -952,9 +965,9 @@ function Footer() {
           <span>Research Canvas · 2026</span>
         </div>
         <div className="flex items-center gap-6">
-          <span>Next.js 15</span>
+          <span>Next.js 16</span>
           <span>·</span>
-          <span>Gemini 2.0 Flash</span>
+          <span>Gemini 2.5 Flash</span>
           <span>·</span>
           <span>React Flow</span>
           <span>·</span>

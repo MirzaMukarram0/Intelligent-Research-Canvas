@@ -15,7 +15,8 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { ResearchNode } from "./ResearchNode";
 import { applyDagreLayout } from "@/lib/dagre";
-import { useGraphStore } from "@/store/graphStore";
+import { useGraphStore, useSlotGraph } from "@/store/graphStore";
+import { useProjectStore, type SlotId } from "@/store/projectStore";
 import { useDocumentStore } from "@/store/documentStore";
 
 const nodeTypes = { research: ResearchNode };
@@ -40,14 +41,17 @@ const edgeDefaults: Partial<Edge> = {
   },
 };
 
-export function GraphPane() {
-  const { rawNodes, rawEdges, isLoading, error, errorHint, graphReady, triggerAnalysis } =
-    useGraphStore();
+export function GraphPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
+  const activeSlotId = useProjectStore((s) => s.activeSlotId);
+  const slotId = slotIdProp ?? activeSlotId;
+  const { rawNodes, rawEdges, isLoading, error, errorHint, graphReady } = useSlotGraph(slotId);
+  const triggerAnalysis = useGraphStore((s) => s.triggerAnalysis);
   const hasDocument = useDocumentStore((s) => s.hasDocument);
   const docText = useDocumentStore((s) => s.text);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [search, setSearch] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     if (!rawNodes.length) {
@@ -172,7 +176,7 @@ export function GraphPane() {
             )}
             <div className="flex items-center gap-2 pt-1">
               <button
-                onClick={() => docText && triggerAnalysis(docText)}
+                onClick={() => docText && triggerAnalysis(slotId, docText)}
                 disabled={!docText}
                 className="font-mono text-[10px] uppercase tracking-[0.18em] text-gold border border-gold/40 hover:bg-gold/10 px-3 py-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -211,6 +215,57 @@ export function GraphPane() {
   }
 
   return (
+    <>
+      {/* Fullscreen overlay */}
+      {fullscreen && (
+        <div className="fixed inset-0 z-50 bg-obsidian flex flex-col">
+          <GraphCanvas
+            displayNodes={displayNodes}
+            displayEdges={displayEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            search={search}
+            setSearch={setSearch}
+            matchCount={matchCount}
+            fullscreen={fullscreen}
+            setFullscreen={setFullscreen}
+          />
+        </div>
+      )}
+      <div className="relative w-full h-full">
+        <GraphCanvas
+          displayNodes={displayNodes}
+          displayEdges={displayEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          search={search}
+          setSearch={setSearch}
+          matchCount={matchCount}
+          fullscreen={fullscreen}
+          setFullscreen={setFullscreen}
+        />
+      </div>
+    </>
+  );
+}
+
+interface GraphCanvasProps {
+  displayNodes: Node[];
+  displayEdges: Edge[];
+  onNodesChange: ReturnType<typeof useNodesState>[2];
+  onEdgesChange: ReturnType<typeof useEdgesState>[2];
+  search: string;
+  setSearch: (v: string) => void;
+  matchCount: number;
+  fullscreen: boolean;
+  setFullscreen: (v: boolean) => void;
+}
+
+function GraphCanvas({
+  displayNodes, displayEdges, onNodesChange, onEdgesChange,
+  search, setSearch, matchCount, fullscreen, setFullscreen,
+}: GraphCanvasProps) {
+  return (
     <div className="relative w-full h-full">
       {/* Floating search bar */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-obsidian-panel/90 backdrop-blur-md border border-obsidian-border hover:border-obsidian-active focus-within:border-gold/50 rounded-lg pl-3 pr-2 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.5)] transition-colors min-w-[280px]">
@@ -241,6 +296,23 @@ export function GraphPane() {
         )}
       </div>
 
+      {/* Expand / collapse button */}
+      <button
+        onClick={() => setFullscreen(!fullscreen)}
+        title={fullscreen ? "Exit fullscreen" : "Expand graph"}
+        className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded bg-obsidian-panel/90 border border-obsidian-border hover:border-gold/50 text-ink-faint hover:text-gold transition-colors backdrop-blur-md"
+      >
+        {fullscreen ? (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+          </svg>
+        ) : (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+          </svg>
+        )}
+      </button>
+
       <ReactFlow
         nodes={displayNodes}
         edges={displayEdges}
@@ -248,7 +320,7 @@ export function GraphPane() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.06, maxZoom: 1.4 }}
         proOptions={{ hideAttribution: true }}
         minZoom={0.3}
         maxZoom={2}
@@ -266,6 +338,9 @@ export function GraphPane() {
             border: "1px solid #1e1e22",
             borderRadius: 8,
             overflow: "hidden",
+            // @ts-ignore
+            "--xy-controls-button-color": "#e8e8e8",
+            "--xy-controls-button-color-hover": "#ffffff",
           }}
           showInteractive={false}
         />

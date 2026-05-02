@@ -3,45 +3,46 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useChatStore } from "@/store/chatStore";
-import { useDocumentStore } from "@/store/documentStore";
-import { useGraphStore } from "@/store/graphStore";
+import { useChatStore, useSlotChat } from "@/store/chatStore";
+import { useProjectStore, type SlotId } from "@/store/projectStore";
+import { useGraphStore, useSlotGraph } from "@/store/graphStore";
 import { useHighlightStore } from "@/store/highlightStore";
+import { CiteButton } from "@/components/shared/CiteButton";
 import { InsightsPanel } from "./InsightsPanel";
 import { ExportButton } from "./ExportButton";
 
 type Tab = "insights" | "chat";
 
-export function ChatPane() {
+export function ChatPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
   const [tab, setTab] = useState<Tab>("insights");
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const {
-    messages,
-    isStreaming,
-    groundingEnabled,
-    addMessage,
-    updateLastAssistant,
-    setLastAssistantSources,
-    setStreaming,
-    setGrounding,
-  } = useChatStore();
-  const docText = useDocumentStore((s) => s.text);
-  const hasDocument = useDocumentStore((s) => s.hasDocument);
-  const { rawNodes: graphNodes, rawEdges: graphEdges } = useGraphStore();
+  const activeSlotIdFromStore = useProjectStore((s) => s.activeSlotId);
+  const activeSlotId = slotIdProp ?? activeSlotIdFromStore;
+  const activeSlot = useProjectStore((s) => s.slots[activeSlotId]);
+  const hasDocument = !!activeSlot;
+  const docText = activeSlot?.text ?? "";
+  const filename = activeSlot?.filename ?? "";
+
+  const slotChat = useSlotChat(activeSlotId);
+  const { messages, groundingEnabled } = slotChat;
+  const isStreaming = useChatStore((s) => s.isStreaming);
+
+  const addMessage = useChatStore((s) => s.addMessage);
+  const updateLastAssistant = useChatStore((s) => s.updateLastAssistant);
+  const setLastAssistantSources = useChatStore((s) => s.setLastAssistantSources);
+  const setStreaming = useChatStore((s) => s.setStreaming);
+  const setGrounding = useChatStore((s) => s.setGrounding);
+
+  const slotGraph = useSlotGraph(activeSlotId);
+  const graphNodes = slotGraph.rawNodes;
+  const graphEdges = slotGraph.rawEdges;
   const { activeQuote, setFocus } = useHighlightStore();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Switch to chat tab automatically when user starts a conversation while on insights
-  useEffect(() => {
-    if (messages.length > 0 && tab === "insights") {
-      // user-initiated; don't auto-switch unless empty insights
-    }
-  }, [messages.length, tab]);
 
   const sendMessage = async () => {
     const trimmed = input.trim();
@@ -49,8 +50,8 @@ export function ChatPane() {
 
     setInput("");
     setTab("chat");
-    addMessage({ role: "user", content: trimmed });
-    addMessage({ role: "assistant", content: "" });
+    addMessage(activeSlotId, { role: "user", content: trimmed });
+    addMessage(activeSlotId, { role: "assistant", content: "" });
     setStreaming(true);
 
     try {
@@ -70,8 +71,6 @@ export function ChatPane() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
-      // Buffer the tail so we can detect the SOURCES sentinel that the server
-      // appends after the streamed message body.
       const SENTINEL = "\n\n<<<IRC_SOURCES>>>";
       let tail = "";
       let sentinelHit = false;
@@ -88,42 +87,37 @@ export function ChatPane() {
         const combined = tail + chunk;
         const idx = combined.indexOf(SENTINEL);
         if (idx >= 0) {
-          // Emit only the part before the sentinel; everything after is sources.
           const before = combined.slice(0, idx);
           if (before.length > tail.length) {
-            updateLastAssistant(before.slice(tail.length));
+            updateLastAssistant(activeSlotId, before.slice(tail.length));
           }
           sourcesJson += combined.slice(idx + SENTINEL.length);
           sentinelHit = true;
           tail = "";
         } else {
-          // Hold back the last SENTINEL.length chars in case the marker straddles a chunk.
           const safe = combined.length - SENTINEL.length;
           if (safe > 0) {
-            updateLastAssistant(combined.slice(0, safe).slice(tail.length));
+            updateLastAssistant(activeSlotId, combined.slice(0, safe).slice(tail.length));
             tail = combined.slice(safe);
           } else {
             tail = combined;
           }
         }
       }
-      if (tail && !sentinelHit) updateLastAssistant(tail);
+      if (tail && !sentinelHit) updateLastAssistant(activeSlotId, tail);
 
       if (sourcesJson) {
         try {
           const parsed = JSON.parse(sourcesJson);
           if (Array.isArray(parsed.sources)) {
-            setLastAssistantSources(parsed.sources);
+            setLastAssistantSources(activeSlotId, parsed.sources);
           }
-        } catch {
-          /* ignore malformed sentinel payload */
-        }
+        } catch { /* ignore */ }
       }
     } catch (err) {
       updateLastAssistant(
-        `\n\n_Error: ${
-          err instanceof Error ? err.message : "request failed"
-        }_`
+        activeSlotId,
+        `\n\n_Error: ${err instanceof Error ? err.message : "request failed"}_`
       );
     } finally {
       setStreaming(false);
@@ -137,9 +131,6 @@ export function ChatPane() {
     if (node) setFocus(node.source_quote, node.id);
   };
 
-  // Click a [CITE: "..."] chip → focus the document on that exact quote.
-  // The text-view highlighter (and the rendered-PDF text layer) will scroll
-  // to and highlight the matching passage.
   const handleCiteChipClick = (quote: string) => {
     if (!quote) return;
     setFocus(quote, "_cite_");
@@ -154,9 +145,7 @@ export function ChatPane() {
             key={t}
             onClick={() => setTab(t)}
             className={`px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors relative ${
-              tab === t
-                ? "text-gold"
-                : "text-ink-faint hover:text-ink-mute"
+              tab === t ? "text-gold" : "text-ink-faint hover:text-ink-mute"
             }`}
           >
             {t}
@@ -183,7 +172,7 @@ export function ChatPane() {
             {messages.length === 0 && (
               <div className="text-center pt-6 space-y-3">
                 <p className="font-mono text-[10px] text-ink-faint uppercase tracking-[0.18em]">
-                  Ask anything about the document
+                  Ask anything about {filename || "the document"}
                 </p>
                 <p className="font-mono text-[10px] text-ink-faint">
                   Tip: click a graph node first to focus your question
@@ -208,29 +197,30 @@ export function ChatPane() {
                       components={{
                         p: ({ children }) => (
                           <p>
-                            {renderInlineChips(
-                              children,
-                              handleNodeChipClick,
-                              handleCiteChipClick
-                            )}
+                            {renderInlineChips(children, handleNodeChipClick, handleCiteChipClick)}
                           </p>
                         ),
                         li: ({ children }) => (
                           <li>
-                            {renderInlineChips(
-                              children,
-                              handleNodeChipClick,
-                              handleCiteChipClick
-                            )}
+                            {renderInlineChips(children, handleNodeChipClick, handleCiteChipClick)}
                           </li>
                         ),
                       }}
                     >
-                      {msg.content +
-                        (isStreaming && i === messages.length - 1
-                          ? " ▍"
-                          : "")}
+                      {msg.content + (isStreaming && i === messages.length - 1 ? " ▍" : "")}
                     </ReactMarkdown>
+                    {/* Cite button under assistant messages */}
+                    {!isStreaming && msg.content && (
+                      <div className="mt-1.5">
+                        <CiteButton
+                          slotId={activeSlotId}
+                          filename={filename}
+                          kind="chat"
+                          label={msg.content.slice(0, 80)}
+                          quote={msg.content}
+                        />
+                      </div>
+                    )}
                     {msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2.5 pt-2 border-t border-obsidian-border/60">
                         <p className="font-mono text-[8.5px] uppercase tracking-[0.2em] text-ai mb-1.5">
@@ -276,7 +266,7 @@ export function ChatPane() {
                   hasDocument
                     ? groundingEnabled
                       ? "Ask about the document or the web…"
-                      : "Ask about the document…"
+                      : `Ask about ${filename || "the document"}…`
                     : "Upload a document first"
                 }
                 rows={1}
@@ -293,7 +283,7 @@ export function ChatPane() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setGrounding(!groundingEnabled)}
+                onClick={() => setGrounding(activeSlotId, !groundingEnabled)}
                 disabled={!hasDocument}
                 title={
                   groundingEnabled
@@ -306,17 +296,11 @@ export function ChatPane() {
                     : "bg-transparent text-ink-faint border-obsidian-border hover:text-ink-mute hover:border-obsidian-active"
                 }`}
               >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    groundingEnabled ? "bg-ai animate-pulse" : "bg-ink-faint"
-                  }`}
-                />
+                <span className={`w-1.5 h-1.5 rounded-full ${groundingEnabled ? "bg-ai animate-pulse" : "bg-ink-faint"}`} />
                 Google Search
               </button>
               <span className="font-mono text-[9px] text-ink-faint">
-                {groundingEnabled
-                  ? "answers grounded in live web results"
-                  : "document-only mode"}
+                {groundingEnabled ? "answers grounded in live web results" : "document-only mode"}
               </span>
             </div>
           </div>
@@ -326,16 +310,12 @@ export function ChatPane() {
   );
 }
 
-// Walks ReactMarkdown children replacing [NODE: label] with concept chips and
-// [CITE: "quote"] with citation chips that scroll the doc to the matching passage.
 function renderInlineChips(
   children: React.ReactNode,
   onNodeClick: (label: string) => void,
   onCiteClick: (quote: string) => void
 ): React.ReactNode {
-  // Match either [NODE: label] or [CITE: "quote"] / [CITE: 'quote'].
   const PATTERN = /\[NODE:\s*([^\]]+)\]|\[CITE:\s*["']([^"']+)["']\s*\]/g;
-
   const transform = (node: React.ReactNode, idx: number): React.ReactNode => {
     if (typeof node === "string") {
       const parts: React.ReactNode[] = [];
@@ -343,33 +323,19 @@ function renderInlineChips(
       let match: RegExpExecArray | null;
       const regex = new RegExp(PATTERN);
       while ((match = regex.exec(node)) !== null) {
-        if (match.index > lastIdx) {
-          parts.push(node.slice(lastIdx, match.index));
-        }
+        if (match.index > lastIdx) parts.push(node.slice(lastIdx, match.index));
         if (match[1]) {
           const label = match[1].trim();
           parts.push(
-            <button
-              key={`n-${idx}-${match.index}`}
-              type="button"
-              className="node-chip"
-              onClick={() => onNodeClick(label)}
-            >
+            <button key={`n-${idx}-${match.index}`} type="button" className="node-chip" onClick={() => onNodeClick(label)}>
               ◆ {label}
             </button>
           );
         } else if (match[2]) {
           const quote = match[2].trim();
-          const preview =
-            quote.length > 36 ? quote.slice(0, 36) + "…" : quote;
+          const preview = quote.length > 36 ? quote.slice(0, 36) + "…" : quote;
           parts.push(
-            <button
-              key={`c-${idx}-${match.index}`}
-              type="button"
-              className="cite-chip"
-              onClick={() => onCiteClick(quote)}
-              title={quote}
-            >
+            <button key={`c-${idx}-${match.index}`} type="button" className="cite-chip" onClick={() => onCiteClick(quote)} title={quote}>
               ❝ {preview}
             </button>
           );
@@ -381,9 +347,6 @@ function renderInlineChips(
     }
     return node;
   };
-
-  if (Array.isArray(children)) {
-    return children.map((c, i) => transform(c, i));
-  }
+  if (Array.isArray(children)) return children.map((c, i) => transform(c, i));
   return transform(children, 0);
 }

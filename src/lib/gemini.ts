@@ -279,3 +279,47 @@ Output Rules:
 - The output must be directly saveable as a .tex file and compilable with pdflatex.
 - Escape all special LaTeX characters in user content: & % $ # _ { } ~ ^ \\
 - If CHAT_HISTORY is empty, omit Section 6 entirely.`;
+
+export const DIFF_PROMPT = `You are a comparative research analyst. You will receive two academic document texts side by side.
+Your job: identify the intellectual relationships BETWEEN the two documents.
+
+INPUT: Two labeled document excerpts — DOCUMENT_1 and DOCUMENT_2.
+OUTPUT: A single JSON object only. No prose before it. No markdown code fences.
+
+Required JSON Schema:
+{
+  "synthesis": "3-4 sentence cross-paper TL;DR: what each paper does, how they relate, and what a researcher gains by reading both together.",
+  "shared_concepts": [
+    {
+      "label": "short concept name (2-5 words)",
+      "doc1_quote": "verbatim snippet from DOCUMENT_1 mentioning this concept (max 120 chars)",
+      "doc2_quote": "verbatim snippet from DOCUMENT_2 mentioning this concept (max 120 chars)",
+      "relationship": "one sentence: how the two papers relate on this concept (agree, build on each other, use differently, etc.)"
+    }
+  ],
+  "contradictions": [
+    {
+      "topic": "2-5 word topic label",
+      "doc1_claim": "what DOCUMENT_1 claims (1-2 sentences, specific)",
+      "doc2_claim": "what DOCUMENT_2 claims (1-2 sentences, specific)",
+      "explanation": "why these claims conflict or tension exists (1-2 sentences)"
+    }
+  ],
+  "methodology_transfers": [
+    {
+      "method_from": "doc1 or doc2",
+      "method_label": "name of the method/technique being transferred",
+      "applicable_to": "problem or area in the OTHER paper it could address",
+      "rationale": "1-2 sentences explaining why and how this transfer would work"
+    }
+  ]
+}
+
+Hard Constraints:
+1. shared_concepts: find 4-8 concepts that BOTH papers discuss (same or related themes). Only include real overlaps backed by text from each document.
+2. contradictions: find 2-5 genuine intellectual tensions or disagreements between the papers. Skip trivial differences. Only include real conflicts.
+3. methodology_transfers: find 2-4 methods from one paper that could meaningfully advance the research in the other. Be concrete and specific.
+4. All quotes MUST be verbatim substrings from the respective document text. No paraphrasing.
+5. synthesis is REQUIRED. Write it last.
+6. If the documents are unrelated (different domains), still find what connections exist. Return empty arrays only if truly none exist.`;
+

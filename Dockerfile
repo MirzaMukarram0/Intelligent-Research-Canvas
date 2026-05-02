@@ -21,6 +21,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV GEMINI_API_KEY=build_placeholder
 
 RUN npm run build
+# Ensure public/ exists so the runner COPY never fails
+RUN mkdir -p /app/public
 
 # ─── Stage 3 · runtime ───────────────────────────────────────────────────
 FROM node:22-alpine AS runner
@@ -38,6 +40,8 @@ RUN addgroup --system --gid 1001 nodejs \
 # Copy standalone output (server.js + minimal node_modules)
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# public/ is optional — create it if it doesn't exist so the COPY never fails
+RUN mkdir -p /app/public
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs

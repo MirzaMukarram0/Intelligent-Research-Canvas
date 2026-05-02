@@ -1,7 +1,9 @@
 "use client";
 
-import { useGraphStore } from "@/store/graphStore";
+import { useGraphStore, useSlotGraph } from "@/store/graphStore";
 import { useHighlightStore } from "@/store/highlightStore";
+import { useProjectStore } from "@/store/projectStore";
+import { CiteButton } from "@/components/shared/CiteButton";
 
 const CATEGORY_META: Record<
   string,
@@ -51,8 +53,10 @@ const CONFIDENCE_DOT: Record<string, string> = {
 };
 
 export function InsightsPanel() {
-  const { insights, isLoading, summary, rawNodes } = useGraphStore();
+  const activeSlotId = useProjectStore((s) => s.activeSlotId);
+  const { insights, isLoading, summary, rawNodes } = useSlotGraph(activeSlotId);
   const setFocus = useHighlightStore((s) => s.setFocus);
+  const filename = useProjectStore((s) => s.slots[s.activeSlotId]?.filename ?? "");
 
   if (isLoading) {
     return (
@@ -141,19 +145,29 @@ export function InsightsPanel() {
                 >
                   {meta.label}
                 </span>
-                <div
-                  className="flex items-center gap-1.5"
-                  title={`${insight.confidence} confidence`}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{
-                      background: CONFIDENCE_DOT[insight.confidence],
-                    }}
+                <div className="flex items-center gap-2">
+                  <CiteButton
+                    slotId={activeSlotId}
+                    filename={filename}
+                    kind="insight"
+                    label={insight.title}
+                    quote={insight.evidence_quote || insight.body.slice(0, 300)}
+                    category={insight.category}
                   />
-                  <span className="font-mono text-[9px] text-ink-faint uppercase tracking-[0.14em]">
-                    {insight.confidence}
-                  </span>
+                  <div
+                    className="flex items-center gap-1.5"
+                    title={`${insight.confidence} confidence`}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{
+                        background: CONFIDENCE_DOT[insight.confidence],
+                      }}
+                    />
+                    <span className="font-mono text-[9px] text-ink-faint uppercase tracking-[0.14em]">
+                      {insight.confidence}
+                    </span>
+                  </div>
                 </div>
               </div>
               <h3 className="font-display text-[17px] leading-snug text-ink mb-1.5">

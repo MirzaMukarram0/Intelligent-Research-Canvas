@@ -5,6 +5,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { useGraphStore } from "@/store/graphStore";
 import { useChatStore } from "@/store/chatStore";
 import { useHighlightStore } from "@/store/highlightStore";
+import { useProjectStore } from "@/store/projectStore";
 import { extractTextFromFile } from "@/lib/pdfWorker";
 
 export function DropZone() {
@@ -18,6 +19,9 @@ export function DropZone() {
   const triggerAnalysis = useGraphStore((s) => s.triggerAnalysis);
   const clearChat = useChatStore((s) => s.clear);
   const clearHighlight = useHighlightStore((s) => s.clearFocus);
+  const addDocument = useProjectStore((s) => s.addDocument);
+  const activeSlotId = useProjectStore((s) => s.activeSlotId);
+  const clearSlot = useChatStore((s) => s.clearSlot);
 
   const processFile = useCallback(
     async (file: File) => {
@@ -42,17 +46,22 @@ export function DropZone() {
         if (text.length < 200) {
           throw new Error("Document contained too little text to analyze.");
         }
+        // Legacy single-doc store (kept for backwards compat with DocumentPane)
         setDocument(text, file.name, file, pageCount);
+        // New project store (multi-doc, persisted)
+        addDocument({ filename: file.name, text, pageCount, kind: isPdf ? "pdf" : "docx" }, activeSlotId);
+        clearSlot(activeSlotId);
         setStage("Running AI agents…");
         setProgress(100);
-        await triggerAnalysis(text);
+        // Slot-keyed analysis (also updates slot-1 legacy fields)
+        await triggerAnalysis(activeSlotId, text);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to process file");
       } finally {
         setIsProcessing(false);
       }
     },
-    [setDocument, triggerAnalysis, clearChat, clearHighlight]
+    [setDocument, triggerAnalysis, clearChat, clearHighlight, addDocument, activeSlotId, clearSlot]
   );
 
   const onDrop = useCallback(

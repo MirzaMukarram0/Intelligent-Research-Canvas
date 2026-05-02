@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDocumentStore } from "@/store/documentStore";
+import { useProjectStore } from "@/store/projectStore";
 import { useHighlightStore } from "@/store/highlightStore";
 import { DropZone } from "./DropZone";
 import { DocumentRenderer } from "./DocumentRenderer";
@@ -9,11 +10,22 @@ import { DocumentRenderer } from "./DocumentRenderer";
 type ViewMode = "rendered" | "text";
 
 export function DocumentPane() {
-  const { text, filename, hasDocument, kind, pageCount, file, clear } =
-    useDocumentStore();
+  const activeSlotId = useProjectStore((s) => s.activeSlotId);
+  const activeSlot = useProjectStore((s) => s.slots[s.activeSlotId]);
+  const removeDocument = useProjectStore((s) => s.removeDocument);
+
+  // File object only lives in the legacy store (not serializable → not persisted)
+  const file = useDocumentStore((s) => s.file);
+  // For rendered view, the legacy store's file might be from a different slot —
+  // only use it when filenames match.
+  const legacyFilename = useDocumentStore((s) => s.filename);
+
   const { activeQuote, clearFocus } = useHighlightStore();
   const contentRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<ViewMode>("rendered");
+
+  // Reset view mode when slot changes
+  useEffect(() => { setView("rendered"); }, [activeSlotId]);
 
   useEffect(() => {
     if (view !== "text") return;
@@ -21,11 +33,20 @@ export function DocumentPane() {
     highlightQuote(activeQuote, contentRef.current);
   }, [activeQuote, view]);
 
-  if (!hasDocument) return <DropZone />;
+  if (!activeSlot) return <DropZone />;
 
+  const { text, filename, kind, pageCount } = activeSlot;
   const charCount = text.length.toLocaleString();
   const wordCount = text.trim().split(/\s+/).length.toLocaleString();
   const canRender = kind === "pdf" || kind === "docx";
+  // Only use the in-memory File when it matches the active slot's filename
+  const matchedFile = legacyFilename === filename ? file : null;
+
+  const handleClear = () => {
+    removeDocument(activeSlotId);
+    clearFocus();
+  };
+
 
   return (
     <div className="flex flex-col h-full">
@@ -44,10 +65,7 @@ export function DocumentPane() {
           {wordCount} words · {charCount} chars
         </span>
         <button
-          onClick={() => {
-            clear();
-            clearFocus();
-          }}
+          onClick={handleClear}
           title="Clear document"
           className="font-mono text-[10px] text-ink-faint hover:text-rose px-2 py-1 rounded transition-colors"
         >
@@ -96,7 +114,7 @@ export function DocumentPane() {
       )}
 
       {view === "rendered" && canRender ? (
-        file ? (
+        matchedFile ? (
           <div className="flex-1 min-h-0">
             <DocumentRenderer />
           </div>
