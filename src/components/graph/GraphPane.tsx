@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -10,6 +10,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   type Edge,
+  type Node,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { ResearchNode } from "./ResearchNode";
@@ -46,6 +47,7 @@ export function GraphPane() {
   const docText = useDocumentStore((s) => s.text);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!rawNodes.length) {
@@ -79,6 +81,65 @@ export function GraphPane() {
     setNodes(laidOut);
     setEdges(flowEdges);
   }, [rawNodes, rawEdges, setNodes, setEdges]);
+
+  // Filter nodes/edges by search query — fade non-matching, keep their
+  // first-degree neighbours visible for context.
+  const { displayNodes, displayEdges, matchCount } = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) {
+      return {
+        displayNodes: nodes,
+        displayEdges: edges,
+        matchCount: 0,
+      };
+    }
+    const matches = new Set(
+      rawNodes
+        .filter(
+          (n) =>
+            n.label.toLowerCase().includes(q) ||
+            n.description.toLowerCase().includes(q) ||
+            n.category.toLowerCase().includes(q) ||
+            n.source_quote.toLowerCase().includes(q)
+        )
+        .map((n) => n.id)
+    );
+    // Pull in first-degree neighbours so context isn't lost
+    const neighbours = new Set<string>();
+    rawEdges.forEach((e) => {
+      if (matches.has(e.source)) neighbours.add(e.target);
+      if (matches.has(e.target)) neighbours.add(e.source);
+    });
+
+    const dn: Node[] = nodes.map((n) => {
+      const isMatch = matches.has(n.id);
+      const isNeighbour = neighbours.has(n.id);
+      return {
+        ...n,
+        style: {
+          ...n.style,
+          opacity: isMatch ? 1 : isNeighbour ? 0.45 : 0.08,
+          transition: "opacity 220ms ease",
+        },
+        data: { ...n.data, dimmed: !isMatch && !isNeighbour },
+      };
+    });
+    const de: Edge[] = edges.map((e) => {
+      const live =
+        matches.has(e.source) ||
+        matches.has(e.target) ||
+        (neighbours.has(e.source) && neighbours.has(e.target));
+      return {
+        ...e,
+        style: {
+          ...(e.style ?? {}),
+          opacity: live ? 1 : 0.06,
+          transition: "opacity 220ms ease",
+        },
+      };
+    });
+    return { displayNodes: dn, displayEdges: de, matchCount: matches.size };
+  }, [search, nodes, edges, rawNodes, rawEdges]);
 
   if (isLoading || (hasDocument && !graphReady && !error)) {
     return <LoadingState />;
@@ -150,54 +211,90 @@ export function GraphPane() {
   }
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      fitView
-      fitViewOptions={{ padding: 0.2 }}
-      proOptions={{ hideAttribution: true }}
-      minZoom={0.3}
-      maxZoom={2}
-      style={{ background: "#0c0c0e" }}
-    >
-      <Background
-        color="#1a1a1f"
-        variant={BackgroundVariant.Dots}
-        gap={26}
-        size={1}
-      />
-      <Controls
-        style={{
-          background: "#111114",
-          border: "1px solid #1e1e22",
-          borderRadius: 8,
-          overflow: "hidden",
-        }}
-        showInteractive={false}
-      />
-      <MiniMap
-        nodeColor={(n) => {
-          const cat = n.data?.category as string;
-          return (
-            ({
-              concept: "#E8A231",
-              entity: "#4A9EFF",
-              method: "#3ECF8E",
-              finding: "#E85D82",
-            } as Record<string, string>)[cat] ?? "#333"
-          );
-        }}
-        maskColor="rgba(12,12,14,0.7)"
-        style={{
-          background: "#0c0c0e",
-          border: "1px solid #1e1e22",
-          borderRadius: 8,
-        }}
-      />
-    </ReactFlow>
+    <div className="relative w-full h-full">
+      {/* Floating search bar */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-obsidian-panel/90 backdrop-blur-md border border-obsidian-border hover:border-obsidian-active focus-within:border-gold/50 rounded-lg pl-3 pr-2 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.5)] transition-colors min-w-[280px]">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-faint flex-shrink-0">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search graph — concept, method, dataset…"
+          className="flex-1 bg-transparent font-mono text-[11px] text-ink placeholder-ink-faint outline-none"
+        />
+        {search && (
+          <>
+            <span className="font-mono text-[9.5px] text-ink-faint uppercase tracking-[0.14em] flex-shrink-0">
+              {matchCount} match{matchCount === 1 ? "" : "es"}
+            </span>
+            <button
+              onClick={() => setSearch("")}
+              className="font-mono text-[12px] text-ink-faint hover:text-rose w-4 h-4 flex items-center justify-center rounded transition-colors"
+              title="Clear"
+            >
+              ✕
+            </button>
+          </>
+        )}
+      </div>
+
+      <ReactFlow
+        nodes={displayNodes}
+        edges={displayEdges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        fitView
+        fitViewOptions={{ padding: 0.2 }}
+        proOptions={{ hideAttribution: true }}
+        minZoom={0.3}
+        maxZoom={2}
+        style={{ background: "#0c0c0e" }}
+      >
+        <Background
+          color="#1a1a1f"
+          variant={BackgroundVariant.Dots}
+          gap={26}
+          size={1}
+        />
+        <Controls
+          style={{
+            background: "#111114",
+            border: "1px solid #1e1e22",
+            borderRadius: 8,
+            overflow: "hidden",
+          }}
+          showInteractive={false}
+        />
+        <MiniMap
+          nodeColor={(n) => {
+            const cat = n.data?.category as string;
+            return (
+              ({
+                concept: "#E8A231",
+                entity: "#4A9EFF",
+                method: "#3ECF8E",
+                finding: "#E85D82",
+                dataset: "#7AD3FF",
+                metric: "#C8E84A",
+                result: "#FF7A8A",
+                assumption: "#B5A8E8",
+                limitation: "#F2A65A",
+              } as Record<string, string>)[cat] ?? "#333"
+            );
+          }}
+          maskColor="rgba(12,12,14,0.7)"
+          style={{
+            background: "#0c0c0e",
+            border: "1px solid #1e1e22",
+            borderRadius: 8,
+          }}
+        />
+      </ReactFlow>
+    </div>
   );
 }
 

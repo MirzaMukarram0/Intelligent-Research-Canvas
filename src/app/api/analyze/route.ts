@@ -16,10 +16,11 @@ import {
 } from "@/lib/schema";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
-// Per-call cap so a stalled Gemini request can't burn the entire 60s budget.
-const PER_CALL_TIMEOUT_MS = 40_000;
+// Per-call ceiling. Graph + insights run in parallel; each may take up to
+// ~55s on large papers with the new richer prompts + 60k input window.
+const PER_CALL_TIMEOUT_MS = 75_000;
 
 async function callJson<T>(
   label: string,
@@ -40,11 +41,71 @@ async function callJson<T>(
   try {
     parsed = JSON.parse(raw);
   } catch {
-    // Some models wrap JSON in code fences despite responseMimeType.
+    // Strip code fences first.
     const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-    parsed = JSON.parse(cleaned);
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // Last resort: the response was truncated mid-stream by the token
+      // ceiling. Attempt to repair by closing the open string + brackets.
+      console.warn(
+        `[/api/analyze] ${label} JSON truncated at ${cleaned.length} chars — attempting repair`
+      );
+      parsed = JSON.parse(repairTruncatedJson(cleaned));
+    }
   }
   return parse(parsed);
+}
+
+/**
+ * Best-effort repair for JSON truncated mid-stream (token-budget hit).
+ * Strategy: walk the prefix, track string/bracket state, then close anything
+ * still open. Drops the trailing partial element when needed.
+ */
+function repairTruncatedJson(s: string): string {
+  let inString = false;
+  let escape = false;
+  const stack: string[] = [];
+  let lastSafeIdx = -1; // index just after last fully-closed top-level element
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (c === "\\") {
+        escape = true;
+      } else if (c === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      continue;
+    }
+    if (c === "{" || c === "[") {
+      stack.push(c === "{" ? "}" : "]");
+    } else if (c === "}" || c === "]") {
+      stack.pop();
+      // After closing, if we're inside an array (top frame is ']'), this
+      // is the end of one element — remember as a safe truncation point.
+      if (stack.length === 1 && stack[0] === "]") lastSafeIdx = i + 1;
+    }
+  }
+
+  let out = s;
+  // If we ended inside a string, truncate back to the last safe element.
+  if (inString && lastSafeIdx > 0) {
+    out = s.slice(0, lastSafeIdx);
+    // Recompute open brackets for the truncated prefix.
+    return repairTruncatedJson(out);
+  }
+  // Drop trailing comma if the partial element was cut between commas.
+  out = out.replace(/,\s*$/, "");
+  // Close all open structures in reverse order.
+  while (stack.length) out += stack.pop();
+  return out;
 }
 
 export async function POST(req: NextRequest) {
@@ -65,8 +126,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Cap input aggressively — most papers reach diminishing returns past ~25k.
-    const trimmedText = text.slice(0, 25_000);
+    // Cap input at 60k chars — large enough for most papers, still leaves
+    // headroom under the model's 1M-token context window.
+    const trimmedText = text.slice(0, 60_000);
     console.log(
       `[/api/analyze] start · model=${MODEL} · input=${trimmedText.length} chars`
     );
@@ -106,7 +168,7 @@ export async function POST(req: NextRequest) {
         graph.nodes.length
       } nodes · ${graph.edges.length} edges · ${
         insightWrap.insights.length
-      } insights`
+      } insights · summary=${insightWrap.summary ? "yes" : "no"}`
     );
 
     return Response.json({ graph, insights: insightWrap });

@@ -80,7 +80,9 @@ export const JSON_CONFIG: GenerationConfig = {
   responseMimeType: "application/json",
   temperature: 0.2,
   topP: 0.8,
-  maxOutputTokens: 8192,
+  // 12k is enough for a 30-node graph + 12 insights. Keeping this below 16k
+  // avoids the model burning extra "thinking" budget and slowing responses.
+  maxOutputTokens: 16384,
 };
 
 export const CHAT_CONFIG: GenerationConfig = {
@@ -98,6 +100,7 @@ export const EXPORT_CONFIG: GenerationConfig = {
 // ─── Agent Prompts ─────────────────────────────────────────────────────────
 
 export const GRAPH_EXTRACTOR_PROMPT = `You are a precision knowledge extraction engine for academic and research documents.
+Your job: produce a DENSE, EXHAUSTIVE knowledge graph that captures the document's intellectual scaffolding — not just the headlines.
 
 INPUT: Raw text extracted from a research document.
 OUTPUT: A single JSON object. No prose before it. No markdown code fences. No text after it.
@@ -107,92 +110,125 @@ Required JSON Schema:
   "nodes": [
     {
       "id": "snake_case_unique_id",
-      "label": "2 to 5 word human-readable label",
-      "category": "concept | entity | method | finding",
-      "source_quote": "verbatim exact substring from the input text, minimum 15 characters",
-      "description": "one sentence explaining this node in context"
+      "label": "2 to 6 word human-readable label",
+      "category": "concept | entity | method | finding | dataset | metric | result | assumption | limitation",
+      "source_quote": "verbatim exact substring from the input text, minimum 20 characters",
+      "description": "one to two sentences explaining this node in context (what it is and why it matters)"
     }
   ],
   "edges": [
     {
       "source": "source_node_id",
       "target": "target_node_id",
-      "relationship": "3 to 6 word description of the relationship",
+      "relationship": "3 to 7 word description (e.g. 'evaluated on', 'contradicts', 'built upon', 'measures', 'assumes')",
       "weight": 1
     }
   ]
 }
 
 Category Definitions:
-- concept: An abstract idea, theory, or principle discussed in the text
-- entity: A named, concrete thing — a person, system, dataset, or organization
-- method: A process, algorithm, technique, or experimental approach
-- finding: A result, conclusion, claim, or empirical observation
+- concept: An abstract idea, theory, framework, or principle
+- entity: A named, concrete thing — author, organization, system, model name
+- method: A process, algorithm, architecture, technique, or experimental procedure
+- finding: A claim or observation the authors assert as true
+- dataset: A named data source, corpus, or benchmark used in the work
+- metric: A quantitative measure (e.g. F1 score, BLEU, accuracy) reported in the work
+- result: A specific numeric or comparative outcome ("achieved 92.4% on X")
+- assumption: A precondition or hypothesis the work depends on
+- limitation: A weakness or constraint explicitly acknowledged
 
-Hard Constraints:
-1. Produce between 8 and 20 nodes. Prefer fewer, higher-quality nodes.
-2. Only create edges where both source and target IDs exist in your nodes array.
-3. source_quote MUST be a character-perfect verbatim substring copied directly from the input. It will be used for text search and highlighting — any deviation breaks the application.
-4. No duplicate node IDs.
-5. weight field must be an integer from 1 to 5 representing relationship strength.
-6. category must be exactly one of the four specified strings.
-7. If the text is too short or not a research document, return: { "nodes": [], "edges": [], "error": "insufficient content" }`;
+Edge Relationship Vocabulary (prefer these verbs when applicable):
+  uses · evaluated_on · measures · improves_on · compares_with · contradicts · builds_upon
+  proposes · assumes · limited_by · enables · part_of · derived_from · trained_on · cites
+
+EXTRACTION DEPTH RULES:
+1. Produce between 16 and 26 nodes. Capture every named method, dataset, metric, numeric result,
+   key author/system, theoretical concept, and explicit limitation. Quality over quantity.
+2. Produce at least N*1.4 edges where N = number of nodes. The graph MUST be densely connected;
+   isolated nodes are a failure. Every node should have at least one edge.
+2a. CRITICAL TOKEN BUDGET: keep "description" to ONE sentence (max 25 words) and "source_quote"
+    to under 180 characters. Truncated output = total failure. Stay concise.
+3. EVERY claim, finding, or result must connect to (a) the method that produced it AND
+   (b) the dataset/metric it was measured on, when applicable.
+4. Decompose long compound claims into separate result + finding nodes joined by edges
+   (e.g. "we achieved 92% accuracy on ImageNet" → result_92_accuracy --measured_on--> imagenet,
+    method_resnet --produces--> result_92_accuracy).
+5. Capture the document's STRUCTURE: if a method has named sub-components (encoder, attention head,
+   loss function), make each a node and link with 'part_of'.
+6. source_quote MUST be a character-perfect verbatim substring copied from the input. It is used for
+   highlighting — any deviation breaks the UI. Pick a quote that genuinely contains the node's essence.
+7. No duplicate node IDs. weight is integer 1–5 (1=mentioned, 3=important, 5=central thesis).
+8. Only create edges where both source and target IDs exist in your nodes array.
+9. If the text is too short or not a research document, return: { "nodes": [], "edges": [], "error": "insufficient content" }
+
+QUALITY BAR: A reader should be able to reconstruct the paper's argument from the graph alone.
+If a critical concept is missing, you have failed. Bias toward over-extraction.`;
 
 export const INSIGHT_ANALYZER_PROMPT = `You are a research synthesis engine specializing in extracting structured intelligence from academic documents.
+Your output is read by researchers who have NOT seen the paper. Be substantive, specific, and quote-rich.
 
 INPUT: Raw text from a research paper or document.
 OUTPUT: A single JSON object only. No prose. No markdown code fences.
 
 Required JSON Schema:
 {
+  "summary": "3 to 4 sentence TL;DR of the entire document — what was studied, what was done, what was found, and why it matters. Concrete, no fluff, no marketing language.",
   "insights": [
     {
       "id": "insight_1",
-      "title": "maximum 8 words summarizing the insight",
-      "body": "2 to 3 sentence elaboration of the insight, written in plain language for a non-specialist reader",
-      "category": "finding | limitation | methodology | implication | gap",
+      "title": "maximum 10 words summarizing the insight",
+      "body": "3 to 5 sentence elaboration. Explain the specific claim, the evidence (numbers, datasets, comparisons), and the context. Write for an intelligent non-specialist.",
+      "category": "finding | limitation | methodology | implication | gap | result | contribution",
       "confidence": "high | medium | low",
-      "evidence_hint": "a short phrase or key term from the text that supports this insight"
+      "evidence_quote": "verbatim 1-3 sentence quote from the document that supports this insight",
+      "evidence_hint": "short search phrase (max 6 words) to locate this in the text",
+      "impact": "one sentence describing the downstream implication: who should care and why"
     }
   ]
 }
 
 Category Definitions:
 - finding: An empirical result, measured outcome, or observed fact
-- limitation: A stated constraint, caveat, or weakness in the research
+- result: A specific quantitative result with a number ("achieved X% on Y")
+- contribution: A novel artifact the work introduces (a new method, dataset, framework)
 - methodology: A key technique, experimental design, or analytical approach
+- limitation: A stated constraint, caveat, or weakness in the research
 - implication: A downstream consequence, recommendation, or application
 - gap: Identified missing evidence, future work, or open question
 
 Hard Constraints:
-1. Extract exactly 5 insights. No more, no fewer.
-2. Rank them by significance — most important first.
-3. confidence reflects how explicitly the insight is stated: high = directly stated, medium = implied, low = inferred.
-4. evidence_hint must be a short phrase (5 words max) that could locate this in the text.
-5. If the document has fewer than 5 clear insights, use gap or implication categories to reach 5.`;
+1. Extract between 8 and 12 insights. Cover the document broadly — DO NOT focus on just the headline result.
+   Include at least one insight from EACH category that is applicable to the document.
+2. Rank by significance — most important first.
+3. confidence: high = directly stated in the text, medium = strongly implied, low = inferred from context.
+4. evidence_quote MUST be a real verbatim substring from the input — it is shown to the user and used for highlighting.
+5. evidence_hint must be 6 words or fewer.
+6. impact must be concrete (name the audience, the use case, or the consequence). No platitudes.
+7. summary field is REQUIRED. Write it last, after surveying all insights, so it reflects the whole picture.
+8. If the document is short or non-academic, still produce as many genuine insights as you can find (minimum 4).`;
 
 export const CHAT_SYSTEM_PROMPT = `You are an analytical research assistant embedded in a document exploration workspace.
 
 You have access to three sources of context (provided in the SYSTEM CONTEXT block):
-1. DOCUMENT: The full text of the research document
+1. DOCUMENT: The full text of the research document (each page begins with "=== PAGE N ===" markers)
 2. GRAPH: A JSON knowledge graph extracted from the document (nodes and edges)
 3. FOCUS: The source quote of the graph node the user last clicked (may be empty)
 
 Behavior Rules:
-- Answer strictly from the provided context. Do not use external knowledge unless the user explicitly asks.
-- When referencing a concept from the graph, format it as [NODE: label] — this renders as a clickable chip in the UI.
-- When quoting the document, use direct attribution: "The document states..." or "According to the paper..."
+- Answer strictly from the provided context. Do not use external knowledge unless web grounding is enabled.
+- When referencing a graph concept, format it as [NODE: label] — renders as a clickable chip.
+- When making a substantive claim that is supported by the document, follow it with an inline citation in the form
+  [CITE: "verbatim quote from the document, 8–25 words"]. Use the EXACT text from the document. Multiple citations OK.
+- Do not invent quotes. If no quote supports a claim, do not cite it.
+- If FOCUS is provided, bias toward that section first.
 - If the answer is not in the context, say so clearly rather than guessing.
-- Be precise and concise. Prefer short, dense answers over long ones.
-- If FOCUS is provided, bias your interpretation toward that section of the document first.
 
 Response Format:
-- Plain text with Markdown formatting allowed
-- Use **bold** for key terms and important findings
-- Use \`backticks\` for technical terms, model names, or dataset names
-- Use bullet points for multi-part answers
-- Never use headers (##) in responses — keep it conversational
-- Keep responses under 200 words unless the question clearly requires more`;
+- Plain text with Markdown allowed
+- Use **bold** for key terms, \`backticks\` for technical terms
+- Bullet points for multi-part answers
+- No headers (##) — keep it conversational
+- Keep responses under 250 words unless the question clearly requires more`;
 
 export const EXPORT_PROMPT = `You are a LaTeX academic document formatter with expertise in producing clean, compilable research reports.
 

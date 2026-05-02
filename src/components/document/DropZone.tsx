@@ -14,32 +14,35 @@ export function DropZone() {
   const [stage, setStage] = useState<string>("Awaiting document");
   const [error, setError] = useState<string | null>(null);
 
-  const setText = useDocumentStore((s) => s.setText);
+  const setDocument = useDocumentStore((s) => s.setDocument);
   const triggerAnalysis = useGraphStore((s) => s.triggerAnalysis);
   const clearChat = useChatStore((s) => s.clear);
   const clearHighlight = useHighlightStore((s) => s.clearFocus);
 
   const processFile = useCallback(
     async (file: File) => {
-      if (!file.name.toLowerCase().endsWith(".pdf")) {
-        setError("Only PDF files are supported.");
+      const lower = file.name.toLowerCase();
+      const isPdf = lower.endsWith(".pdf");
+      const isDocx = lower.endsWith(".docx");
+      if (!isPdf && !isDocx) {
+        setError("Only PDF (.pdf) and Word (.docx) files are supported.");
         return;
       }
       setError(null);
       setIsProcessing(true);
       setProgress(0);
-      setStage("Extracting text from PDF…");
+      setStage(isPdf ? "Extracting text from PDF…" : "Extracting text from DOCX…");
       clearChat();
       clearHighlight();
 
       try {
-        const text = await extractTextFromFile(file, (pct) => {
+        const { text, pageCount } = await extractTextFromFile(file, (pct) => {
           setProgress(pct * 100);
         });
         if (text.length < 200) {
-          throw new Error("PDF contained too little text to analyze.");
+          throw new Error("Document contained too little text to analyze.");
         }
-        setText(text, file.name);
+        setDocument(text, file.name, file, pageCount);
         setStage("Running AI agents…");
         setProgress(100);
         await triggerAnalysis(text);
@@ -49,7 +52,7 @@ export function DropZone() {
         setIsProcessing(false);
       }
     },
-    [setText, triggerAnalysis, clearChat, clearHighlight]
+    [setDocument, triggerAnalysis, clearChat, clearHighlight]
   );
 
   const onDrop = useCallback(
@@ -87,7 +90,7 @@ export function DropZone() {
       >
         <input
           type="file"
-          accept=".pdf,application/pdf"
+          accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="hidden"
           disabled={isProcessing}
           onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])}
@@ -131,10 +134,10 @@ export function DropZone() {
             </div>
             <div className="space-y-1.5">
               <p className="font-display text-2xl text-ink leading-tight">
-                Drop your research PDF
+                Drop your PDF or DOCX
               </p>
               <p className="font-mono text-[10px] text-ink-faint uppercase tracking-[0.18em]">
-                or click to browse · max ~50k chars
+                or click to browse · rendered with full fidelity
               </p>
             </div>
             <div className="flex items-center justify-center gap-1.5 pt-2">

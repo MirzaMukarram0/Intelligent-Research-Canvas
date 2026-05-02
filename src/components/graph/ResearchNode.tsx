@@ -24,6 +24,31 @@ const CATEGORY_STYLES = {
     label: "finding",
     glow: "rgba(232,93,130,0.18)",
   },
+  dataset: {
+    border: "#7AD3FF",
+    label: "dataset",
+    glow: "rgba(122,211,255,0.18)",
+  },
+  metric: {
+    border: "#C8E84A",
+    label: "metric",
+    glow: "rgba(200,232,74,0.18)",
+  },
+  result: {
+    border: "#FF7A8A",
+    label: "result",
+    glow: "rgba(255,122,138,0.18)",
+  },
+  assumption: {
+    border: "#B5A8E8",
+    label: "assumption",
+    glow: "rgba(181,168,232,0.18)",
+  },
+  limitation: {
+    border: "#F2A65A",
+    label: "limitation",
+    glow: "rgba(242,166,90,0.18)",
+  },
 } as const;
 
 export function ResearchNode({ data, selected }: NodeProps) {

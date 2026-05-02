@@ -20,9 +20,12 @@ export function ChatPane() {
   const {
     messages,
     isStreaming,
+    groundingEnabled,
     addMessage,
     updateLastAssistant,
+    setLastAssistantSources,
     setStreaming,
+    setGrounding,
   } = useChatStore();
   const docText = useDocumentStore((s) => s.text);
   const hasDocument = useDocumentStore((s) => s.hasDocument);
@@ -59,6 +62,7 @@ export function ChatPane() {
           docText,
           graph: { nodes: graphNodes, edges: graphEdges },
           focusQuote: activeQuote,
+          useGrounding: groundingEnabled,
         }),
       });
 
@@ -66,10 +70,54 @@ export function ChatPane() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
+      // Buffer the tail so we can detect the SOURCES sentinel that the server
+      // appends after the streamed message body.
+      const SENTINEL = "\n\n<<<IRC_SOURCES>>>";
+      let tail = "";
+      let sentinelHit = false;
+      let sourcesJson = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        updateLastAssistant(decoder.decode(value, { stream: true }));
+        const chunk = decoder.decode(value, { stream: true });
+        if (sentinelHit) {
+          sourcesJson += chunk;
+          continue;
+        }
+        const combined = tail + chunk;
+        const idx = combined.indexOf(SENTINEL);
+        if (idx >= 0) {
+          // Emit only the part before the sentinel; everything after is sources.
+          const before = combined.slice(0, idx);
+          if (before.length > tail.length) {
+            updateLastAssistant(before.slice(tail.length));
+          }
+          sourcesJson += combined.slice(idx + SENTINEL.length);
+          sentinelHit = true;
+          tail = "";
+        } else {
+          // Hold back the last SENTINEL.length chars in case the marker straddles a chunk.
+          const safe = combined.length - SENTINEL.length;
+          if (safe > 0) {
+            updateLastAssistant(combined.slice(0, safe).slice(tail.length));
+            tail = combined.slice(safe);
+          } else {
+            tail = combined;
+          }
+        }
+      }
+      if (tail && !sentinelHit) updateLastAssistant(tail);
+
+      if (sourcesJson) {
+        try {
+          const parsed = JSON.parse(sourcesJson);
+          if (Array.isArray(parsed.sources)) {
+            setLastAssistantSources(parsed.sources);
+          }
+        } catch {
+          /* ignore malformed sentinel payload */
+        }
       }
     } catch (err) {
       updateLastAssistant(
@@ -87,6 +135,14 @@ export function ChatPane() {
       (n) => n.label.toLowerCase() === label.toLowerCase()
     );
     if (node) setFocus(node.source_quote, node.id);
+  };
+
+  // Click a [CITE: "..."] chip → focus the document on that exact quote.
+  // The text-view highlighter (and the rendered-PDF text layer) will scroll
+  // to and highlight the matching passage.
+  const handleCiteChipClick = (quote: string) => {
+    if (!quote) return;
+    setFocus(quote, "_cite_");
   };
 
   return (
@@ -150,17 +206,22 @@ export function ChatPane() {
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        p: ({ children }) => {
-                          // Replace [NODE: label] inline tokens with chips
-                          return (
-                            <p>
-                              {renderNodeChips(children, handleNodeChipClick)}
-                            </p>
-                          );
-                        },
+                        p: ({ children }) => (
+                          <p>
+                            {renderInlineChips(
+                              children,
+                              handleNodeChipClick,
+                              handleCiteChipClick
+                            )}
+                          </p>
+                        ),
                         li: ({ children }) => (
                           <li>
-                            {renderNodeChips(children, handleNodeChipClick)}
+                            {renderInlineChips(
+                              children,
+                              handleNodeChipClick,
+                              handleCiteChipClick
+                            )}
                           </li>
                         ),
                       }}
@@ -170,6 +231,28 @@ export function ChatPane() {
                           ? " ▍"
                           : "")}
                     </ReactMarkdown>
+                    {msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-2.5 pt-2 border-t border-obsidian-border/60">
+                        <p className="font-mono text-[8.5px] uppercase tracking-[0.2em] text-ai mb-1.5">
+                          ◆ Web sources · Google Search
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {msg.sources.map((s, si) => (
+                            <a
+                              key={si}
+                              href={s.uri}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-ai/[0.06] hover:bg-ai/[0.12] border border-ai/25 hover:border-ai/50 rounded text-[10.5px] text-ai/80 hover:text-ai transition-colors max-w-[260px] truncate"
+                              title={s.uri}
+                            >
+                              <span className="opacity-60">↗</span>
+                              <span className="truncate">{s.title}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -178,32 +261,64 @@ export function ChatPane() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-obsidian-border px-3 py-2.5 flex gap-2 flex-shrink-0 bg-obsidian-panel/40">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
+          <div className="border-t border-obsidian-border px-3 py-2 flex flex-col gap-1.5 flex-shrink-0 bg-obsidian-panel/40">
+            <div className="flex gap-2">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                placeholder={
+                  hasDocument
+                    ? groundingEnabled
+                      ? "Ask about the document or the web…"
+                      : "Ask about the document…"
+                    : "Upload a document first"
                 }
-              }}
-              placeholder={
-                hasDocument
-                  ? "Ask about the document…"
-                  : "Upload a document first"
-              }
-              rows={1}
-              disabled={!hasDocument || isStreaming}
-              className="flex-1 bg-transparent resize-none font-mono text-[12px] text-ink placeholder-ink-faint outline-none py-1.5 disabled:opacity-50"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={isStreaming || !input.trim() || !hasDocument}
-              className="px-3.5 py-1.5 bg-gold/10 text-gold border border-gold/40 rounded-md font-mono text-[11px] uppercase tracking-[0.12em] hover:bg-gold/20 hover:border-gold/60 disabled:opacity-30 disabled:hover:bg-gold/10 transition-all"
-            >
-              Send
-            </button>
+                rows={1}
+                disabled={!hasDocument || isStreaming}
+                className="flex-1 bg-transparent resize-none font-mono text-[12px] text-ink placeholder-ink-faint outline-none py-1.5 disabled:opacity-50"
+              />
+              <button
+                onClick={sendMessage}
+                disabled={isStreaming || !input.trim() || !hasDocument}
+                className="px-3.5 py-1.5 bg-gold/10 text-gold border border-gold/40 rounded-md font-mono text-[11px] uppercase tracking-[0.12em] hover:bg-gold/20 hover:border-gold/60 disabled:opacity-30 disabled:hover:bg-gold/10 transition-all"
+              >
+                Send
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setGrounding(!groundingEnabled)}
+                disabled={!hasDocument}
+                title={
+                  groundingEnabled
+                    ? "Disable Google Search grounding"
+                    : "Enable Google Search grounding for live web facts"
+                }
+                className={`flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[9.5px] uppercase tracking-[0.16em] border transition-colors disabled:opacity-30 ${
+                  groundingEnabled
+                    ? "bg-ai/15 text-ai border-ai/50 hover:bg-ai/25"
+                    : "bg-transparent text-ink-faint border-obsidian-border hover:text-ink-mute hover:border-obsidian-active"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    groundingEnabled ? "bg-ai animate-pulse" : "bg-ink-faint"
+                  }`}
+                />
+                Google Search
+              </button>
+              <span className="font-mono text-[9px] text-ink-faint">
+                {groundingEnabled
+                  ? "answers grounded in live web results"
+                  : "document-only mode"}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -211,34 +326,54 @@ export function ChatPane() {
   );
 }
 
-// Recursively walks ReactMarkdown children replacing [NODE: label] with chips.
-function renderNodeChips(
+// Walks ReactMarkdown children replacing [NODE: label] with concept chips and
+// [CITE: "quote"] with citation chips that scroll the doc to the matching passage.
+function renderInlineChips(
   children: React.ReactNode,
-  onClick: (label: string) => void
+  onNodeClick: (label: string) => void,
+  onCiteClick: (quote: string) => void
 ): React.ReactNode {
-  const NODE_PATTERN = /\[NODE:\s*([^\]]+)\]/g;
+  // Match either [NODE: label] or [CITE: "quote"] / [CITE: 'quote'].
+  const PATTERN = /\[NODE:\s*([^\]]+)\]|\[CITE:\s*["']([^"']+)["']\s*\]/g;
 
   const transform = (node: React.ReactNode, idx: number): React.ReactNode => {
     if (typeof node === "string") {
       const parts: React.ReactNode[] = [];
       let lastIdx = 0;
       let match: RegExpExecArray | null;
-      const regex = new RegExp(NODE_PATTERN);
+      const regex = new RegExp(PATTERN);
       while ((match = regex.exec(node)) !== null) {
         if (match.index > lastIdx) {
           parts.push(node.slice(lastIdx, match.index));
         }
-        const label = match[1].trim();
-        parts.push(
-          <button
-            key={`${idx}-${match.index}`}
-            type="button"
-            className="node-chip"
-            onClick={() => onClick(label)}
-          >
-            ◆ {label}
-          </button>
-        );
+        if (match[1]) {
+          const label = match[1].trim();
+          parts.push(
+            <button
+              key={`n-${idx}-${match.index}`}
+              type="button"
+              className="node-chip"
+              onClick={() => onNodeClick(label)}
+            >
+              ◆ {label}
+            </button>
+          );
+        } else if (match[2]) {
+          const quote = match[2].trim();
+          const preview =
+            quote.length > 36 ? quote.slice(0, 36) + "…" : quote;
+          parts.push(
+            <button
+              key={`c-${idx}-${match.index}`}
+              type="button"
+              className="cite-chip"
+              onClick={() => onCiteClick(quote)}
+              title={quote}
+            >
+              ❝ {preview}
+            </button>
+          );
+        }
         lastIdx = match.index + match[0].length;
       }
       if (lastIdx < node.length) parts.push(node.slice(lastIdx));

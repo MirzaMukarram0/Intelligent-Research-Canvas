@@ -7,7 +7,7 @@
 type PdfJsModule = typeof import("pdfjs-dist");
 let pdfjsPromise: Promise<PdfJsModule> | null = null;
 
-async function loadPdfJs(): Promise<PdfJsModule> {
+export async function loadPdfJs(): Promise<PdfJsModule> {
   if (!pdfjsPromise) {
     pdfjsPromise = import("pdfjs-dist").then(async (mod) => {
       const version = mod.version;
@@ -18,10 +18,24 @@ async function loadPdfJs(): Promise<PdfJsModule> {
   return pdfjsPromise;
 }
 
+export interface ExtractResult {
+  text: string;
+  pageCount: number;
+}
+
 export async function extractTextFromFile(
   file: File,
   onProgress?: (pct: number) => void
-): Promise<string> {
+): Promise<ExtractResult> {
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".docx")) return extractFromDocx(file, onProgress);
+  return extractFromPdf(file, onProgress);
+}
+
+async function extractFromPdf(
+  file: File,
+  onProgress?: (pct: number) => void
+): Promise<ExtractResult> {
   const pdfjs = await loadPdfJs();
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
@@ -36,13 +50,30 @@ export async function extractTextFromFile(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((item: any) => ("str" in item ? item.str : ""))
       .join(" ");
-    collected.push(pageText);
+    // Prefix each page with a marker so the chat model can cite by page.
+    collected.push(`=== PAGE ${i} ===\n${pageText}`);
     onProgress?.(i / total);
   }
 
-  return collected
-    .join("\n\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return {
+    text: collected
+      .join("\n\n")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+    pageCount: total,
+  };
+}
+
+async function extractFromDocx(
+  file: File,
+  onProgress?: (pct: number) => void
+): Promise<ExtractResult> {
+  onProgress?.(0.2);
+  const mammoth = await import("mammoth/mammoth.browser");
+  const arrayBuffer = await file.arrayBuffer();
+  onProgress?.(0.5);
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  onProgress?.(1);
+  return { text: result.value.trim(), pageCount: 0 };
 }
