@@ -1,14 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    // Empty config silences the warning; Turbopack handles pdfjs-dist's optional
+    // `canvas` dependency automatically in client bundles.
+  },
   webpack: (config) => {
-    // Avoid issues with pdfjs-dist canvas dependency in server bundles
+    // Fallback for non-Turbopack builds.
     config.resolve.alias.canvas = false;
     return config;
-  },
-  experimental: {
-    // Allow larger payloads for document text in API routes
-    serverActions: { bodySizeLimit: "10mb" },
   },
 };
 
