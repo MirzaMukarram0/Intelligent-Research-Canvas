@@ -5,7 +5,9 @@ import {
   JSON_CONFIG,
   GRAPH_EXTRACTOR_PROMPT,
   INSIGHT_ANALYZER_PROMPT,
+  withRetry,
 } from "@/lib/gemini";
+import { humanizeGeminiError } from "@/lib/errors";
 import {
   graphResponseSchema,
   insightResponseSchema,
@@ -38,11 +40,15 @@ export async function POST(req: NextRequest) {
     });
 
     const [graphResult, insightResult] = await Promise.all([
-      model.generateContent(
-        `${GRAPH_EXTRACTOR_PROMPT}\n\n---\n\nTEXT:\n${trimmedText}`
+      withRetry(() =>
+        model.generateContent(
+          `${GRAPH_EXTRACTOR_PROMPT}\n\n---\n\nTEXT:\n${trimmedText}`
+        )
       ),
-      model.generateContent(
-        `${INSIGHT_ANALYZER_PROMPT}\n\n---\n\nTEXT:\n${trimmedText}`
+      withRetry(() =>
+        model.generateContent(
+          `${INSIGHT_ANALYZER_PROMPT}\n\n---\n\nTEXT:\n${trimmedText}`
+        )
       ),
     ]);
 
@@ -67,8 +73,7 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
-    const message =
-      err instanceof Error ? err.message : "Analysis failed.";
-    return Response.json({ error: message }, { status: 500 });
+    const { status, message, hint } = humanizeGeminiError(err);
+    return Response.json({ error: message, hint }, { status });
   }
 }

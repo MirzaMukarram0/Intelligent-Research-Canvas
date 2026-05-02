@@ -14,7 +14,41 @@ export function getGenAI(): GoogleGenerativeAI {
   return _genai;
 }
 
-export const MODEL = "gemini-2.0-flash";
+// gemini-2.5-flash is the current free-tier model. Override via env if you've
+// upgraded to a paid plan and want a different model (e.g. gemini-2.5-pro).
+export const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+
+/**
+ * Wraps a Gemini call with exponential backoff for 429 / rate-limit errors.
+ * Honours the `retryDelay` returned by the API when present.
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { retries?: number; baseDelayMs?: number } = {}
+): Promise<T> {
+  const retries = opts.retries ?? 2;
+  const baseDelay = opts.baseDelayMs ?? 1500;
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const is429 = /429|quota|rate/i.test(msg);
+      if (!is429 || attempt === retries) throw err;
+
+      // Try to extract the API-suggested retry delay (e.g. "23.6s").
+      const m = msg.match(/retryDelay"?\s*:\s*"?(\d+(?:\.\d+)?)s/i);
+      const delay = m
+        ? Math.min(parseFloat(m[1]) * 1000, 30_000)
+        : baseDelay * Math.pow(2, attempt);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
 
 export const JSON_CONFIG: GenerationConfig = {
   responseMimeType: "application/json",

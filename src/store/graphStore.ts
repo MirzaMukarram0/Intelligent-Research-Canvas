@@ -9,6 +9,7 @@ interface GraphState {
   graphReady: boolean;
   insightsReady: boolean;
   error: string | null;
+  errorHint: string | null;
   triggerAnalysis: (text: string) => Promise<void>;
   reset: () => void;
 }
@@ -21,11 +22,13 @@ export const useGraphStore = create<GraphState>((set) => ({
   graphReady: false,
   insightsReady: false,
   error: null,
+  errorHint: null,
 
   triggerAnalysis: async (text: string) => {
     set({
       isLoading: true,
       error: null,
+      errorHint: null,
       graphReady: false,
       insightsReady: false,
       rawNodes: [],
@@ -40,7 +43,10 @@ export const useGraphStore = create<GraphState>((set) => ({
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `Analysis failed (${res.status})`);
+        const e = new Error(err.error ?? `Analysis failed (${res.status})`);
+        // attach hint for UI
+        (e as Error & { hint?: string }).hint = err.hint;
+        throw e;
       }
       const { graph, insights } = await res.json();
       set({
@@ -53,7 +59,11 @@ export const useGraphStore = create<GraphState>((set) => ({
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Analysis failed";
-      set({ error: message, isLoading: false });
+      const hint =
+        err && typeof err === "object" && "hint" in err
+          ? (err as { hint?: string }).hint ?? null
+          : null;
+      set({ error: message, errorHint: hint, isLoading: false });
     }
   },
 
@@ -66,5 +76,6 @@ export const useGraphStore = create<GraphState>((set) => ({
       graphReady: false,
       insightsReady: false,
       error: null,
+      errorHint: null,
     }),
 }));

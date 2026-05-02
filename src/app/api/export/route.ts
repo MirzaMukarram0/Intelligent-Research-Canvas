@@ -4,7 +4,9 @@ import {
   MODEL,
   EXPORT_CONFIG,
   EXPORT_PROMPT,
+  withRetry,
 } from "@/lib/gemini";
+import { humanizeGeminiError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,8 +31,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (format === "markdown") {
-      const result = await model.generateContent(
-        `Convert the following research data into a clean Markdown report with the following sections in order: # Research Canvas — Structured Analysis, ## Abstract (3-4 sentences), ## Key Findings (bullet list of insights with category and confidence), ## Concept Map (each node with its category and connected edges), ## Research Conversation (transcript). Output ONLY the Markdown — no code fences.\n\n${context}`
+      const result = await withRetry(() =>
+        model.generateContent(
+          `Convert the following research data into a clean Markdown report with the following sections in order: # Research Canvas — Structured Analysis, ## Abstract (3-4 sentences), ## Key Findings (bullet list of insights with category and confidence), ## Concept Map (each node with its category and connected edges), ## Research Conversation (transcript). Output ONLY the Markdown — no code fences.\n\n${context}`
+        )
       );
       const md = result.response.text();
       return new Response(md, {
@@ -42,8 +46,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const result = await model.generateContent(
-      `${EXPORT_PROMPT}\n\n${context}`
+    const result = await withRetry(() =>
+      model.generateContent(`${EXPORT_PROMPT}\n\n${context}`)
     );
     const tex = result.response.text().replace(/^```(?:latex|tex)?\n?|\n?```$/g, "");
     return new Response(tex, {
@@ -55,7 +59,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("[/api/export]", err);
-    const message = err instanceof Error ? err.message : "Export failed";
-    return Response.json({ error: message }, { status: 500 });
+    const { status, message, hint } = humanizeGeminiError(err);
+    return Response.json({ error: message, hint }, { status });
   }
 }

@@ -1,8 +1,8 @@
 "use client";
 
 // Lazy-loaded client-side PDF text extraction using pdfjs-dist.
-// Worker is loaded from a CDN matching the installed version to avoid
-// having to copy large worker files into /public.
+// Worker is loaded from unpkg, which mirrors npm exactly and serves the
+// matching file for whatever pdfjs-dist version is installed.
 
 type PdfJsModule = typeof import("pdfjs-dist");
 let pdfjsPromise: Promise<PdfJsModule> | null = null;
@@ -11,7 +11,7 @@ async function loadPdfJs(): Promise<PdfJsModule> {
   if (!pdfjsPromise) {
     pdfjsPromise = import("pdfjs-dist").then(async (mod) => {
       const version = mod.version;
-      mod.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`;
+      mod.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
       return mod;
     });
   }

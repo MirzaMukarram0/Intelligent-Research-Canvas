@@ -40,8 +40,10 @@ const edgeDefaults: Partial<Edge> = {
 };
 
 export function GraphPane() {
-  const { rawNodes, rawEdges, isLoading, error, graphReady } = useGraphStore();
+  const { rawNodes, rawEdges, isLoading, error, errorHint, graphReady, triggerAnalysis } =
+    useGraphStore();
   const hasDocument = useDocumentStore((s) => s.hasDocument);
+  const docText = useDocumentStore((s) => s.text);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
@@ -83,14 +85,51 @@ export function GraphPane() {
   }
 
   if (error) {
+    const isQuota = /quota|rate|429/i.test(error);
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-obsidian gap-3">
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-rose">
-          Analysis failed
-        </p>
-        <p className="font-mono text-[11px] text-ink-mute max-w-md text-center">
-          {error}
-        </p>
+      <div className="w-full h-full flex items-center justify-center bg-obsidian p-6">
+        <div className="max-w-md w-full bg-obsidian-panel/80 border border-rose/30 rounded-xl overflow-hidden shadow-[0_20px_60px_rgba(232,93,130,0.12)]">
+          <div className="px-4 py-2.5 border-b border-rose/20 bg-rose/5 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose animate-pulse" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-rose">
+              {isQuota ? "Rate limit / quota" : "Analysis failed"}
+            </span>
+          </div>
+          <div className="p-5 space-y-4">
+            <p className="font-display text-[18px] text-ink leading-snug">
+              {error}
+            </p>
+            {errorHint && (
+              <div className="bg-obsidian-raised/60 border border-obsidian-border rounded-md p-3">
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-ink-faint mb-1.5">
+                  ◆ How to fix
+                </p>
+                <p className="text-[12px] text-ink-soft leading-relaxed break-words">
+                  {errorHint}
+                </p>
+              </div>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => docText && triggerAnalysis(docText)}
+                disabled={!docText}
+                className="font-mono text-[10px] uppercase tracking-[0.18em] text-gold border border-gold/40 hover:bg-gold/10 px-3 py-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ↻ Retry analysis
+              </button>
+              {isQuota && (
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-mute hover:text-ink border border-obsidian-border hover:border-obsidian-active px-3 py-1.5 rounded transition-colors"
+                >
+                  Get API key →
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

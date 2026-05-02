@@ -5,6 +5,7 @@ import {
   CHAT_CONFIG,
   CHAT_SYSTEM_PROMPT,
 } from "@/lib/gemini";
+import { humanizeGeminiError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (err) {
     console.error("[/api/chat]", err);
-    const message = err instanceof Error ? err.message : "Chat failed";
-    return Response.json({ error: message }, { status: 500 });
+    const { status, message, hint } = humanizeGeminiError(err);
+    return Response.json({ error: message, hint }, { status });
   }
 }
