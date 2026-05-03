@@ -20,7 +20,8 @@
   --color-rose: #e85d82;
 
   --font-display: "Instrument Serif", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --animate-border-pulse: border-pulse 2.4s ease-in-out infinite;
   --animate-fade-in: fade-in 0.4s ease-out;
@@ -75,9 +76,17 @@ html, body {
 }
 
 body {
-  font-feature-settings: "ss01", "cv01", "cv02";
+  font-feature-settings: "liga", "ss01", "cv01", "cv02";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  letter-spacing: -0.01em;
+}
+
+/* Focus ring — consistent keyboard navigation */
+*:focus-visible {
+  outline: 2px solid hsla(212, 100%, 60%, 0.9);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Custom scrollbar */
@@ -93,8 +102,8 @@ body {
 
 /* Selection color */
 ::selection {
-  background: rgba(232, 162, 49, 0.32);
-  color: var(--color-ink);
+  background: rgba(232, 162, 49, 0.28);
+  color: hsla(0, 0%, 95%, 1);
 }
 
 /* Highlight mark used by Document Pane */

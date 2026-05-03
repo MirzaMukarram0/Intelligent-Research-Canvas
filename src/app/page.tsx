@@ -89,7 +89,7 @@ function NavBar() {
 function Hero() {
   return (
     <section className="relative max-w-7xl mx-auto px-6 pt-24 pb-20 md:pt-32 md:pb-28">
-      <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
+      <div className="flex flex-col items-center text-center max-w-5xl mx-auto">
         <div className="inline-flex items-center gap-2 border border-obsidian-border bg-obsidian-panel/60 backdrop-blur rounded-full pl-1.5 pr-3 py-1 mb-9">
           <span className="font-mono text-[9px] uppercase tracking-[0.2em] bg-gold/15 text-gold rounded-full px-2 py-0.5">
             New
@@ -99,37 +99,38 @@ function Hero() {
           </span>
         </div>
 
-        <h1 className="font-display text-[56px] md:text-[88px] leading-[0.95] tracking-tight mb-7">
-          Your literature review
+        <h1 className="font-display text-[64px] md:text-[108px] leading-[0.93] tracking-tight mb-8">
+          From papers
           <br />
-          <span className="italic text-ink-mute">hub, not a chatbot.</span>
+          <span className="italic text-ink-mute">to understanding</span>
+          <br />
+          your field.
         </h1>
 
-        <p className="text-[17px] md:text-[18px] text-ink-soft leading-relaxed max-w-2xl mb-10">
-          Load up to <strong className="text-ink">3 papers simultaneously</strong>. Two AI agents extract a knowledge graph
-          and ranked insights per document. <strong className="text-ink">Cite</strong> any node, insight, or
-          chat reply to a persistent notepad — then export a structured research report.
-          Switch to <strong className="text-ink">Compare mode</strong> to diff two papers side-by-side without leaving the canvas.
+        <p className="text-[19px] md:text-[21px] text-ink-soft leading-relaxed max-w-lg mb-12">
+          Every paper becomes a knowledge map.{" "}
+          <strong className="text-ink">Cite findings, compare sources,
+          export your review.</strong>
         </p>
 
-        <div className="flex flex-wrap items-center justify-center gap-3 mb-14">
+        <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
           <Link
             href="/canvas"
-            className="group inline-flex items-center gap-2 bg-gold text-obsidian font-mono text-[12px] uppercase tracking-[0.14em] font-semibold rounded-md px-5 py-3 hover:bg-gold-soft transition-all shadow-[0_0_40px_rgba(232,162,49,0.25)]"
+            className="group inline-flex items-center gap-2.5 bg-gold text-obsidian font-mono text-[13px] uppercase tracking-[0.14em] font-semibold rounded-lg px-7 py-4 hover:bg-gold-soft transition-all shadow-[0_0_50px_rgba(232,162,49,0.3)]"
           >
             <span>Launch Canvas</span>
             <span className="group-hover:translate-x-0.5 transition-transform">→</span>
           </Link>
           <Link
             href="/canvas"
-            className="group inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.14em] text-ai border border-ai/40 hover:bg-ai/10 hover:border-ai/60 rounded-md px-5 py-3 transition-all"
+            className="group inline-flex items-center gap-2.5 font-mono text-[13px] uppercase tracking-[0.14em] text-ai border border-ai/40 hover:bg-ai/10 hover:border-ai/60 rounded-lg px-7 py-4 transition-all"
           >
             <span>Compare Papers →</span>
             <span className="font-mono text-[9px] text-ai/60 normal-case tracking-normal">inside canvas</span>
           </Link>
           <a
             href="#how"
-            className="inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.14em] text-ink-mute border border-obsidian-border hover:border-obsidian-active hover:text-ink rounded-md px-5 py-3 transition-all"
+            className="inline-flex items-center gap-2.5 font-mono text-[13px] uppercase tracking-[0.14em] text-ink-mute border border-obsidian-border hover:border-obsidian-active hover:text-ink rounded-lg px-7 py-4 transition-all"
           >
             See how it works
           </a>
@@ -461,7 +462,7 @@ function PreviewCallout({
         <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] mb-1">
           {label}
         </p>
-        <p className="text-[12.5px] text-ink-soft leading-relaxed">{body}</p>
+        <p className="text-[13.5px] text-ink-soft leading-relaxed">{body}</p>
       </div>
     </div>
   );
@@ -654,7 +655,7 @@ function FeatureGrid() {
               <h3 className="font-display text-[28px] leading-tight text-ink mb-3">
                 {f.title}
               </h3>
-              <p className="text-[14.5px] text-ink-soft leading-relaxed max-w-md">
+              <p className="text-[15px] text-ink-soft leading-relaxed max-w-md">
                 {f.body}
               </p>
             </div>
@@ -998,7 +999,7 @@ function SectionHeader({
         {title}
       </h2>
       {sub && (
-        <p className="text-[15px] text-ink-soft mt-4 max-w-2xl leading-relaxed">
+        <p className="text-[17px] text-ink-soft mt-5 max-w-2xl leading-relaxed">
           {sub}
         </p>
       )}

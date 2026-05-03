@@ -11,9 +11,14 @@ import { extractTextFromFile } from "@/lib/pdfWorker";
 export function DropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState<string>("Awaiting document");
   const [error, setError] = useState<string | null>(null);
+
+  // Pending state: file loaded but analysis not yet started
+  const [pendingText, setPendingText] = useState<string | null>(null);
+  const [pendingFilename, setPendingFilename] = useState<string | null>(null);
 
   const setDocument = useDocumentStore((s) => s.setDocument);
   const triggerAnalysis = useGraphStore((s) => s.triggerAnalysis);
@@ -33,6 +38,8 @@ export function DropZone() {
         return;
       }
       setError(null);
+      setPendingText(null);
+      setPendingFilename(null);
       setIsProcessing(true);
       setProgress(0);
       setStage(isPdf ? "Extracting text from PDF…" : "Extracting text from DOCX…");
@@ -51,18 +58,32 @@ export function DropZone() {
         // New project store (multi-doc, persisted)
         addDocument({ filename: file.name, text, pageCount, kind: isPdf ? "pdf" : "docx" }, activeSlotId);
         clearSlot(activeSlotId);
-        setStage("Running AI agents…");
+        // Don't auto-analyze — surface the Start Analysis button instead
+        setPendingText(text);
+        setPendingFilename(file.name);
+        setStage("Ready");
         setProgress(100);
-        // Slot-keyed analysis (also updates slot-1 legacy fields)
-        await triggerAnalysis(activeSlotId, text);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to process file");
       } finally {
         setIsProcessing(false);
       }
     },
-    [setDocument, triggerAnalysis, clearChat, clearHighlight, addDocument, activeSlotId, clearSlot]
+    [setDocument, clearChat, clearHighlight, addDocument, activeSlotId, clearSlot]
   );
+
+  const startAnalysis = useCallback(async () => {
+    if (!pendingText) return;
+    setIsAnalyzing(true);
+    setError(null);
+    try {
+      await triggerAnalysis(activeSlotId, pendingText);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [pendingText, activeSlotId, triggerAnalysis]);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -90,40 +111,94 @@ export function DropZone() {
         <div className="absolute -bottom-1/4 -right-1/4 w-96 h-96 rounded-full bg-ai/10 blur-3xl" />
       </div>
 
-      <label
-        className={`relative w-full max-w-md aspect-[5/4] flex flex-col items-center justify-center border rounded-2xl cursor-pointer transition-all duration-300 backdrop-blur-sm ${
-          isDragging
-            ? "border-gold bg-gold/5 scale-[1.02] shadow-[0_0_60px_rgba(232,162,49,0.15)]"
-            : "border-obsidian-border border-dashed bg-obsidian-panel/40 hover:border-obsidian-active animate-border-pulse"
-        }`}
-      >
-        <input
-          type="file"
-          accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          className="hidden"
-          disabled={isProcessing}
-          onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])}
-        />
-
-        {isProcessing ? (
-          <div className="text-center space-y-5 animate-fade-in px-6 w-full">
-            <div className="w-10 h-10 mx-auto relative">
-              <div className="absolute inset-0 border-2 border-gold/20 rounded-full" />
-              <div className="absolute inset-0 border-2 border-gold border-t-transparent rounded-full animate-spin" />
-            </div>
-            <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold mb-2">
-                {stage}
-              </p>
-              <div className="h-[2px] bg-obsidian-border rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-gold to-gold-soft transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
+      {/* Outer element: label (clickable file-picker) only when idle */}
+      {pendingText || isProcessing || isAnalyzing ? (
+        <div
+          className={`relative w-full max-w-md aspect-[5/4] flex flex-col items-center justify-center border rounded-2xl transition-all duration-300 backdrop-blur-sm ${
+            isDragging
+              ? "border-gold bg-gold/5 scale-[1.02] shadow-[0_0_60px_rgba(232,162,49,0.15)]"
+              : "border-obsidian-border border-dashed bg-obsidian-panel/40"
+          }`}
+        >
+          {isProcessing ? (
+            <div className="text-center space-y-5 animate-fade-in px-6 w-full">
+              <div className="w-10 h-10 mx-auto relative">
+                <div className="absolute inset-0 border-2 border-gold/20 rounded-full" />
+                <div className="absolute inset-0 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+              </div>
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-gold mb-2">
+                  {stage}
+                </p>
+                <div className="h-[2px] bg-obsidian-border rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-gold to-gold-soft transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
+          ) : (
+            <div className="text-center space-y-5 animate-fade-in px-8">
+              <div className="w-14 h-14 mx-auto rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gold">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="9" y1="13" x2="15" y2="13" />
+                  <line x1="9" y1="17" x2="13" y2="17" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <p className="font-display text-xl text-ink leading-tight truncate max-w-[260px] mx-auto">
+                  {pendingFilename}
+                </p>
+                <p className="font-mono text-[10px] text-sage uppercase tracking-[0.18em]">
+                  ✓ Document loaded
+                </p>
+              </div>
+              <button
+                onClick={startAnalysis}
+                disabled={isAnalyzing}
+                className="inline-flex items-center gap-2.5 bg-gold text-obsidian font-mono text-[12px] uppercase tracking-[0.16em] font-semibold rounded-lg px-6 py-3 hover:bg-gold-soft transition-all shadow-[0_0_40px_rgba(232,162,49,0.3)] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-obsidian/40 border-t-obsidian rounded-full animate-spin" />
+                    <span>Analyzing…</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Start Analysis</span>
+                    <span>→</span>
+                  </>
+                )}
+              </button>
+              <label className="block font-mono text-[9.5px] text-ink-faint uppercase tracking-[0.16em] cursor-pointer hover:text-ink-mute transition-colors">
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])}
+                />
+                Replace document
+              </label>
+            </div>
+          )}
+        </div>
+      ) : (
+        <label
+          className={`relative w-full max-w-md aspect-[5/4] flex flex-col items-center justify-center border rounded-2xl cursor-pointer transition-all duration-300 backdrop-blur-sm ${
+            isDragging
+              ? "border-gold bg-gold/5 scale-[1.02] shadow-[0_0_60px_rgba(232,162,49,0.15)]"
+              : "border-obsidian-border border-dashed bg-obsidian-panel/40 hover:border-obsidian-active animate-border-pulse"
+          }`}
+        >
+          <input
+            type="file"
+            accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])}
+          />
           <div className="text-center space-y-5 px-8">
             <div className="w-14 h-14 mx-auto rounded-xl bg-gold/8 border border-gold/25 flex items-center justify-center">
               <svg
@@ -156,8 +231,8 @@ export function DropZone() {
               <span className="w-1 h-1 rounded-full bg-rose/60" />
             </div>
           </div>
-        )}
-      </label>
+        </label>
+      )}
 
       {error && (
         <p className="mt-4 font-mono text-[11px] text-rose animate-fade-in">

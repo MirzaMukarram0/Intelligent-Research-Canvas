@@ -139,23 +139,23 @@ export function ChatPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
   return (
     <div className="flex flex-col h-full bg-obsidian-panel">
       {/* Tab bar */}
-      <div className="flex items-center border-b border-obsidian-border flex-shrink-0">
+      <div className="flex items-center border-b border-obsidian-border flex-shrink-0 bg-obsidian-panel/60">
         {(["insights", "chat"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors relative ${
-              tab === t ? "text-gold" : "text-ink-faint hover:text-ink-mute"
+            className={`px-6 py-3.5 font-mono text-[12px] uppercase tracking-[0.18em] font-semibold transition-colors relative ${
+              tab === t ? "text-gold" : "text-ink-soft hover:text-ink"
             }`}
           >
             {t}
             {t === "chat" && messages.length > 0 && (
-              <span className="ml-1.5 text-[9px] text-ink-faint">
+              <span className="ml-2 text-[10px] text-ink-mute">
                 ({Math.floor(messages.length / 2)})
               </span>
             )}
             {tab === t && (
-              <span className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-gold" />
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-gold" />
             )}
           </button>
         ))}
@@ -171,10 +171,10 @@ export function ChatPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {messages.length === 0 && (
               <div className="text-center pt-6 space-y-3">
-                <p className="font-mono text-[10px] text-ink-faint uppercase tracking-[0.18em]">
+                <p className="font-mono text-[12px] text-ink-soft uppercase tracking-[0.18em] font-semibold">
                   Ask anything about {filename || "the document"}
                 </p>
-                <p className="font-mono text-[10px] text-ink-faint">
+                <p className="font-mono text-[11px] text-ink-mute">
                   Tip: click a graph node first to focus your question
                 </p>
               </div>
@@ -271,17 +271,17 @@ export function ChatPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
                 }
                 rows={1}
                 disabled={!hasDocument || isStreaming}
-                className="flex-1 bg-transparent resize-none font-mono text-[12px] text-ink placeholder-ink-faint outline-none py-1.5 disabled:opacity-50"
+                className="flex-1 bg-transparent resize-none font-mono text-[13.5px] text-ink placeholder-ink-mute outline-none py-2 disabled:opacity-50"
               />
               <button
                 onClick={sendMessage}
                 disabled={isStreaming || !input.trim() || !hasDocument}
-                className="px-3.5 py-1.5 bg-gold/10 text-gold border border-gold/40 rounded-md font-mono text-[11px] uppercase tracking-[0.12em] hover:bg-gold/20 hover:border-gold/60 disabled:opacity-30 disabled:hover:bg-gold/10 transition-all"
+                className="px-5 py-2 bg-gold text-obsidian border border-gold rounded-md font-mono text-[12px] uppercase tracking-[0.14em] font-semibold hover:bg-gold-soft disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(232,162,49,0.2)]"
               >
                 Send
               </button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <button
                 onClick={() => setGrounding(activeSlotId, !groundingEnabled)}
                 disabled={!hasDocument}
@@ -290,16 +290,16 @@ export function ChatPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
                     ? "Disable Google Search grounding"
                     : "Enable Google Search grounding for live web facts"
                 }
-                className={`flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[9.5px] uppercase tracking-[0.16em] border transition-colors disabled:opacity-30 ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md font-mono text-[11px] uppercase tracking-[0.16em] font-semibold border transition-colors disabled:opacity-30 ${
                   groundingEnabled
-                    ? "bg-ai/15 text-ai border-ai/50 hover:bg-ai/25"
-                    : "bg-transparent text-ink-faint border-obsidian-border hover:text-ink-mute hover:border-obsidian-active"
+                    ? "bg-ai/20 text-ai border-ai/60 hover:bg-ai/30"
+                    : "bg-obsidian-raised/40 text-ink-soft border-obsidian-active hover:text-ink hover:border-ink-faint"
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${groundingEnabled ? "bg-ai animate-pulse" : "bg-ink-faint"}`} />
+                <span className={`w-2 h-2 rounded-full ${groundingEnabled ? "bg-ai animate-pulse" : "bg-ink-mute"}`} />
                 Google Search
               </button>
-              <span className="font-mono text-[9px] text-ink-faint">
+              <span className="font-mono text-[10px] text-ink-mute">
                 {groundingEnabled ? "answers grounded in live web results" : "document-only mode"}
               </span>
             </div>

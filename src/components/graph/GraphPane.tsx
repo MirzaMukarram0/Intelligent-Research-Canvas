@@ -44,10 +44,15 @@ const edgeDefaults: Partial<Edge> = {
 export function GraphPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
   const activeSlotId = useProjectStore((s) => s.activeSlotId);
   const slotId = slotIdProp ?? activeSlotId;
-  const { rawNodes, rawEdges, isLoading, error, errorHint, graphReady } = useSlotGraph(slotId);
+  const { rawNodes, rawEdges, isLoading, error, errorHint } = useSlotGraph(slotId);
   const triggerAnalysis = useGraphStore((s) => s.triggerAnalysis);
-  const hasDocument = useDocumentStore((s) => s.hasDocument);
-  const docText = useDocumentStore((s) => s.text);
+  // Per-slot document text from the project store (correct for multi-doc).
+  // Falls back to legacy single-doc store if the slot record is empty.
+  const slotDoc = useProjectStore((s) => s.slots[slotId]);
+  const legacyText = useDocumentStore((s) => s.text);
+  const legacyHasDoc = useDocumentStore((s) => s.hasDocument);
+  const docText = slotDoc?.text ?? legacyText;
+  const hasDocument = !!slotDoc || legacyHasDoc;
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [search, setSearch] = useState("");
@@ -145,7 +150,7 @@ export function GraphPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
     return { displayNodes: dn, displayEdges: de, matchCount: matches.size };
   }, [search, nodes, edges, rawNodes, rawEdges]);
 
-  if (isLoading || (hasDocument && !graphReady && !error)) {
+  if (isLoading) {
     return <LoadingState />;
   }
 
@@ -200,6 +205,38 @@ export function GraphPane({ slotId: slotIdProp }: { slotId?: SlotId } = {}) {
   }
 
   if (!nodes.length) {
+    if (hasDocument && docText) {
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-obsidian">
+          <div className="text-center space-y-6 px-8">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-gold/10 border border-gold/30 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gold">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 1v6m0 10v6m11-11h-6M7 12H1m17.66-6.34l-4.24 4.24M9.58 14.42l-4.24 4.24m13.32 0l-4.24-4.24M9.58 9.58L5.34 5.34" />
+              </svg>
+            </div>
+            <div className="space-y-2">
+              <p className="font-display text-3xl text-ink leading-tight">
+                Ready to analyze
+              </p>
+              <p className="font-mono text-[11px] text-ink-faint uppercase tracking-[0.18em] max-w-sm mx-auto">
+                Two AI agents will extract a knowledge graph and ranked insights
+              </p>
+            </div>
+            <button
+              onClick={() => triggerAnalysis(slotId, docText)}
+              className="inline-flex items-center gap-2.5 bg-gold text-obsidian font-mono text-[13px] uppercase tracking-[0.16em] font-semibold rounded-lg px-7 py-3.5 hover:bg-gold-soft transition-all shadow-[0_0_50px_rgba(232,162,49,0.35)]"
+            >
+              <span>Start Analysis</span>
+              <span>→</span>
+            </button>
+            <p className="font-mono text-[9.5px] text-ink-faint uppercase tracking-[0.16em]">
+              ◆ Uses ~2 Gemini API requests
+            </p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="w-full h-full flex items-center justify-center bg-obsidian">
         <div className="text-center space-y-2">

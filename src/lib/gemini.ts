@@ -14,10 +14,10 @@ export function getGenAI(): GoogleGenerativeAI {
   return _genai;
 }
 
-// gemini-2.5-flash-lite is fast (no "thinking" tokens), free-tier-friendly
-// (15 RPM), and ideal for structured JSON extraction. Override via env if you
-// need higher quality (e.g. gemini-2.5-flash, gemini-2.5-pro).
-export const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite";
+// gemini-2.0-flash: 1,500 req/day free tier (vs 20/day for 2.5-flash-lite),
+// fast, no thinking tokens, ideal for structured JSON extraction. Override via
+// env if you need higher quality (e.g. gemini-2.5-flash, gemini-2.5-pro).
+export const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
 
 // Hard ceiling for any single Gemini call. The Vercel/Cloud Run function
 // timeout is 60s, so we cap individual model calls a bit lower to leave room

@@ -19,11 +19,11 @@ export function NotepadPane() {
       <button
         onClick={toggleExpanded}
         title={expanded ? "Close Notepad" : "Open Research Notepad"}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-30 h-24 w-6 flex items-center justify-center bg-obsidian-panel border border-obsidian-border border-r-0 rounded-l-md hover:bg-obsidian-raised transition-colors group"
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-30 h-32 w-9 flex items-center justify-center bg-gold/10 border-2 border-r-0 border-gold/40 rounded-l-lg hover:bg-gold/20 hover:border-gold/70 transition-all group shadow-[-4px_0_20px_rgba(232,162,49,0.15)]"
         style={{ writingMode: "vertical-rl" }}
       >
-        <span className="font-mono text-[8px] uppercase tracking-[0.2em] text-ink-faint group-hover:text-gold transition-colors rotate-180">
-          {citations.length > 0 ? `Notes · ${citations.length}` : "Notepad"}
+        <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-gold font-semibold rotate-180">
+          {citations.length > 0 ? `Notepad · ${citations.length}` : "Notepad"}
         </span>
       </button>
 
